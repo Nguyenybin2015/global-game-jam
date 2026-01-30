@@ -86,6 +86,8 @@ const LEVELS: LevelConfig[] = [
   },
 ];
 
+const PREGENERATED_LEVEL_COUNT = 20; // total campaign levels (includes handcrafted LEVELS)
+
 // --- HELPER FUNCTIONS ---
 
 const resolveCollision = (p: any, obs: Entity) => {
@@ -741,6 +743,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     particles: [] as Particle[],
     bgElements: [] as BackgroundElement[],
     shake: 0,
+    // pre-generated campaign: when true the game will use a fixed set of
+    // precomputed maps (PREGENERATED_LEVEL_COUNT). Stored in `preGenerated`.
+    preGeneratedMode: false,
+    preGenerated: null as LevelConfig[] | null,
+    // deterministic-ish seed derived from level index (kept for reproducibility)
+    procSeed: 0,
+    // the active LevelConfig for the current level (handcrafted or pre-generated)
+    config: LEVELS[0] as LevelConfig,
   });
   const keys = useRef({ right: false, left: false, up: false });
 
@@ -801,8 +811,60 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   };
 
+  /**
+   * Procedural level generator — lightweight, deterministic by level index.
+   * Produces a LevelConfig compatible with the handcrafted `LEVELS` so the
+   * rest of the game can treat procedural levels the same way.
+   */
+  const generateProceduralConfig = (levelIdx: number): LevelConfig => {
+    const difficulty = Math.max(0, levelIdx - (LEVELS.length - 1));
+    const length = 1800 + difficulty * 400 + Math.floor(Math.random() * 800);
+    // cycle required masks to encourage varied playstyles
+    const maskCycle = [
+      MaskType.CHILD,
+      MaskType.STUDENT,
+      MaskType.WORKER,
+      MaskType.SOCIAL,
+      MaskType.NONE,
+    ];
+    const reqMask = maskCycle[levelIdx % maskCycle.length];
+    const names = ["Lộ Trình A", "Lộ Trình B", "Lộ Trình C", "Lộ Trình D"];
+    const bg =
+      difficulty % 2 === 0 ? ["#0f1724", "#1f2937"] : ["#0b3a2e", "#164e63"];
+
+    return {
+      id: levelIdx,
+      name: `TỰ TẠO #${levelIdx}`,
+      bgGradient: bg as [string, string],
+      groundColor: difficulty > 2 ? "#4b5563" : "#7f8c8d",
+      reqMask,
+      message: `Màn được tạo tự động — Độ khó ${difficulty}`,
+      obstacleType: "procedural",
+      length,
+    };
+  };
+
   const generateLevel = (levelIdx: number) => {
-    const config = LEVELS[levelIdx];
+    // if procedural mode is active or the index goes beyond handcrafted LEVELS,
+    // generate a compatible LevelConfig on-the-fly
+    // Prefer a pre-generated campaign entry (if present). Otherwise use
+    // the handcrafted LEVELS. Do NOT generate infinite levels — if the
+    // requested index is past available content, end the run.
+    if (
+      levelState.current.preGenerated &&
+      levelIdx < levelState.current.preGenerated.length
+    ) {
+      levelState.current.config = levelState.current.preGenerated[levelIdx];
+    } else if (levelIdx < LEVELS.length) {
+      levelState.current.config = LEVELS[levelIdx];
+    } else {
+      // index beyond available content -> victory (no infinite generation)
+      setGameState(GameState.VICTORY);
+      return;
+    }
+    const config = levelState.current.config;
+
+    // persist active config so update()/draw() use the same values (and below)
     const obstacles: Entity[] = [];
 
     player.current.x = 50;
@@ -1003,6 +1065,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       levelState.current.highDetailEnabled = enabled;
     };
 
+    // new: listen for the 'proc-levels' toggle from the UI. Previously
+    // this created infinite procedural content; now it *pre-generates a
+    // fixed campaign* of PREGENERATED_LEVEL_COUNT maps and stores them.
+    const onProcLevels = (ev: Event) => {
+      const enabled = !!(ev as CustomEvent).detail;
+      levelState.current.preGeneratedMode = enabled;
+      if (enabled) {
+        const total = PREGENERATED_LEVEL_COUNT;
+        const arr: LevelConfig[] = [];
+        for (let i = 0; i < total; i++) {
+          arr.push(i < LEVELS.length ? LEVELS[i] : generateProceduralConfig(i));
+        }
+        levelState.current.preGenerated = arr;
+        levelState.current.procSeed = Date.now() % 100000;
+      } else {
+        levelState.current.preGenerated = null;
+        levelState.current.procSeed = 0;
+        levelState.current.preGeneratedMode = false;
+      }
+      // regenerate current level so UI reflects the change immediately
+      generateLevel(levelState.current.index);
+    };
+
     // Respect user's OS motion preference by default
     if (typeof window !== "undefined" && window.matchMedia) {
       const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1015,10 +1100,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     window.addEventListener("bg-preset", onPreset as EventListener);
     window.addEventListener("bg-effects", onEffects as EventListener);
     window.addEventListener("high-detail", onHighDetail as EventListener);
+    window.addEventListener("proc-levels", onProcLevels as EventListener);
     return () => {
       window.removeEventListener("bg-preset", onPreset as EventListener);
       window.removeEventListener("bg-effects", onEffects as EventListener);
       window.removeEventListener("high-detail", onHighDetail as EventListener);
+      window.removeEventListener("proc-levels", onProcLevels as EventListener);
     };
   }, []);
 
@@ -1207,7 +1294,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // 2. Interaction
         if (obs.type === "goal") {
-          if (l.index < LEVELS.length - 1) generateLevel(l.index + 1);
+          // Progression: allow next level if it's within handcrafted LEVELS
+          // or within a pre-generated campaign. Do NOT generate infinitely.
+          const hasNextInPreGen = !!(
+            l.preGenerated && l.index < l.preGenerated.length - 1
+          );
+          if (l.index < LEVELS.length - 1 || hasNextInPreGen)
+            generateLevel(l.index + 1);
           else setGameState(GameState.VICTORY);
           return;
         } else if (obs.type === "spike") {
@@ -1249,7 +1342,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // Camera
-    const config = LEVELS[l.index];
+    const config = levelState.current.config || LEVELS[l.index];
     let targetCamX = p.x - CANVAS_WIDTH / 3;
     if (targetCamX < 0) targetCamX = 0;
     if (targetCamX > config.length - CANVAS_WIDTH + 100)
@@ -1312,7 +1405,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const draw = (ctx: CanvasRenderingContext2D) => {
     const l = levelState.current;
     const p = player.current;
-    const config = LEVELS[l.index];
+    const config = l.config || LEVELS[l.index];
     // whether to render extra high-fidelity details (controlled from HUD / reduced-motion aware)
     const highDetail = !!(l.effectsEnabled && l.highDetailEnabled);
 

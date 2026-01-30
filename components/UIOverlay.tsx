@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GameState, MaskType, TOTAL_MEMORIES } from "../types";
 
 interface UIProps {
@@ -104,6 +104,15 @@ const UIOverlay: React.FC<UIProps> = ({
   const isPlaying = gameState === GameState.PLAYING;
   const isLowHealth = health < 40;
   const glitchIntensity = isLowHealth ? Math.min(1, (40 - health) / 30) : 0;
+
+  // Procedural-level toggle (kept locally in the HUD and emitted to canvas)
+  const [procMode, setProcMode] = useState(false);
+  useEffect(() => {
+    const onProc = (ev: Event) => setProcMode(!!(ev as CustomEvent).detail);
+    window.addEventListener("proc-levels", onProc as EventListener);
+    return () =>
+      window.removeEventListener("proc-levels", onProc as EventListener);
+  }, []);
 
   // small HUD-only expression helpers (keeps SVG crisp and readable)
   const svgBrowTilt = (() => {
@@ -261,6 +270,29 @@ const UIOverlay: React.FC<UIProps> = ({
                 đổi mặt nạ. Nhấn <span className='font-mono'>Space</span> để
                 nhảy.
               </p>
+
+              {/* Pre-generated campaign toggle (20 levels) */}
+              <div className='mt-3 flex items-center gap-3'>
+                <label className='flex items-center gap-2 text-sm text-gray-300'>
+                  <input
+                    type='checkbox'
+                    checked={procMode}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setProcMode(v);
+                      window.dispatchEvent(
+                        new CustomEvent("proc-levels", { detail: v }),
+                      );
+                    }}
+                    aria-label='Bật chiến dịch 20 màn'
+                    className='w-4 h-4 bg-black/20 rounded'
+                  />
+                  <span className='font-semibold'>Chiến dịch — 20 màn</span>
+                </label>
+                <div className='text-xs text-gray-400'>
+                  Tải trước 20 bản đồ, không sinh vô hạn
+                </div>
+              </div>
             </div>
             <div className='flex gap-3 mt-4'>
               <button
@@ -355,6 +387,13 @@ const UIOverlay: React.FC<UIProps> = ({
               ? "S.E.R.A không thể tính toán được cảm xúc chân thật của bạn. Bạn đã tự do."
               : "Bạn đã về nhà, nhưng S.E.R.A vẫn đang quan sát..."}
           </p>
+
+          {procMode && (
+            <div className='text-sm text-amber-200 mb-4'>
+              Chiến dịch 20 màn: <span className='font-semibold'>BẬT</span>
+            </div>
+          )}
+
           <button
             onClick={() => setGameState(GameState.START)}
             className='px-6 py-2 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors'
@@ -817,7 +856,7 @@ const UIOverlay: React.FC<UIProps> = ({
         </div>
 
         {/* Graphics quality (high-detail) — toggle for visual polish */}
-        <div className='neumorph-card px-3 py-2 w-full flex items-center justify-between gap-3'>
+        {/* <div className='neumorph-card px-3 py-2 w-full flex items-center justify-between gap-3'>
           <div className='text-[10px] font-mono text-gray-400'>GRAPHICS</div>
           <div className='flex gap-2'>
             <button
@@ -843,7 +882,7 @@ const UIOverlay: React.FC<UIProps> = ({
               Detail Off
             </button>
           </div>
-        </div>
+        </div> */}
       </div>
 
       <div className='absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 z-30 pointer-events-auto'>
