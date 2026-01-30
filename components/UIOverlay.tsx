@@ -1,5 +1,5 @@
-import React from 'react';
-import { GameState, MaskType, TOTAL_MEMORIES } from '../types';
+import React from "react";
+import { GameState, MaskType, TOTAL_MEMORIES } from "../types";
 
 interface UIProps {
   gameState: GameState;
@@ -13,54 +13,164 @@ interface UIProps {
   aiMessage: string;
 }
 
-const MASKS = [
-  { id: MaskType.NONE, icon: "😐", label: "Chân Thật", key: "0", desc: "Cân bằng" },
-  { id: MaskType.CHILD, icon: "😆", label: "Vui Vẻ", key: "1", desc: "Tăng tốc / Nảy" },
-  { id: MaskType.STUDENT, icon: "😔", label: "U Sầu", key: "2", desc: "Lơ lửng / Chậm" },
-  { id: MaskType.WORKER, icon: "😡", label: "Giận Dữ", key: "3", desc: "Phá hủy / Nặng" },
-  { id: MaskType.SOCIAL, icon: "🤖", label: "Tuân Thủ", key: "4", desc: "Tiêu chuẩn" },
+// Lightweight Tailwind-only liquid bar (prefers-reduced-motion aware)
+const LiquidBar: React.FC<{ value: number; color?: string; ariaLabel?: string }> = ({ value, color = "#34d399", ariaLabel }) => {
+  const safe = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div className="relative w-full h-4 rounded-xl overflow-hidden bg-[rgba(255,255,255,0.03)] shadow-[inset_ -6px_-6px_18px_rgba(255,255,255,0.03),14px_18px_30px_rgba(2,6,23,0.45)]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={safe} aria-label={ariaLabel || "progress"}>
+      <div
+        className={`absolute left-0 top-0 h-full rounded-xl transition-[width,transform] duration-500 ease-[cubic-bezier(.2,.9,.2,1)] motion-reduce:transition-none`}
+        style={{
+          width: `${safe}%`,
+          background: `linear-gradient(90deg, ${color}, rgba(255,255,255,0.12))`,
+          boxShadow: `0 6px 18px rgba(2,6,23,0.35), inset -6px -6px 14px rgba(255,255,255,0.02)`,
+          transform: `translateZ(0)`,
+        }}
+      />
+      {/* subtle surface wave (CSS animation; respects prefers-reduced-motion) */}
+      <div className="pointer-events-none absolute inset-0 opacity-30 mix-blend-screen motion-reduce:opacity-0" style={{background: `linear-gradient(120deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.00) 40%, rgba(255,255,255,0.03) 100%)`, backgroundSize: '200% 100%', animation: 'liquid-slide 3500ms linear infinite'}} />
+      <style>{`@keyframes liquid-slide{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}@media (prefers-reduced-motion: reduce){.motion-reduce\\:opacity-0{opacity:0!important}}`}</style>
+    </div>
+  );
+};
+
+const MASKS = ["},{
+  {
+    id: MaskType.CHILD,
+    key: 1,
+    label: "VUI VẺ",
+    desc: "Nhanh, nảy bật",
+    icon: "🙂",
+  },
+  {
+    id: MaskType.STUDENT,
+    key: 2,
+    label: "U SẦU",
+    desc: "Lơ lửng, chậm",
+    icon: "😢",
+  },
+  {
+    id: MaskType.WORKER,
+    key: 3,
+    label: "GIẬN DỮ",
+    desc: "Phá chướng ngại",
+    icon: "😡",
+  },
+  {
+    id: MaskType.SOCIAL,
+    key: 4,
+    label: "XÃ HỘI",
+    desc: "Tuân thủ tuyệt đối",
+    icon: "😐",
+  },
+  {
+    id: MaskType.NONE,
+    key: 0,
+    label: "CHÂN THẬT",
+    desc: "Không mặt nạ",
+    icon: "👤",
+  },
 ];
 
-const UIOverlay: React.FC<UIProps> = ({ gameState, setGameState, health, integrity, mask, levelIndex, deathReason, memories, aiMessage }) => {
-  
+const UIOverlay: React.FC<UIProps> = ({
+  gameState,
+  setGameState,
+  health,
+  integrity,
+  mask,
+  levelIndex,
+  deathReason,
+  memories,
+  aiMessage,
+}) => {
   const isPlaying = gameState === GameState.PLAYING;
   const isLowHealth = health < 40;
   const glitchIntensity = isLowHealth ? Math.min(1, (40 - health) / 30) : 0;
-  
-  // AI Mood Styling
-  const aiColor = isLowHealth ? "text-red-500" : (mask === MaskType.NONE && levelIndex < 4 ? "text-orange-400" : "text-green-500");
+
+  const aiColor = isLowHealth
+    ? "text-red-500"
+    : mask === MaskType.NONE && levelIndex < 4
+      ? "text-orange-400"
+      : "text-green-500";
   const aiBorder = isLowHealth ? "border-red-500/50" : "border-green-500/50";
   const aiBg = isLowHealth ? "bg-red-500" : "bg-green-500";
 
   if (gameState === GameState.START) {
     return (
-      <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center p-8 z-50 crt-overlay">
-        <div className="border-4 border-yellow-500/50 p-10 bg-black/70 backdrop-blur-md rounded-lg shadow-[0_0_50px_rgba(234,179,8,0.2)] pointer-events-auto">
-            <h1 className="text-6xl font-serif text-yellow-400 mb-6 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] tracking-wider">HÀNH TRÌNH VỀ NHÀ</h1>
-            <p className="text-gray-300 max-w-lg mb-8 text-lg font-mono">
-              [SYSTEM DETECTED: NEW SUBJECT]<br/>
-              Chào mừng đến với hệ thống giả lập xã hội.
-            </p>
-            <div className="grid grid-cols-3 gap-4 text-sm mb-8 text-left">
-                <div className="bg-yellow-900/30 p-2 border border-yellow-700 rounded">
-                    <span className="text-yellow-400 block font-bold">MẶT NẠ 1: VUI VẺ</span>
-                    Di chuyển nhanh, nảy bật, khó kiểm soát.
-                </div>
-                <div className="bg-blue-900/30 p-2 border border-blue-700 rounded">
-                    <span className="text-blue-400 block font-bold">MẶT NẠ 2: U SẦU</span>
-                    Trọng lực thấp, lơ lửng, nhảy thấp.
-                </div>
-                <div className="bg-red-900/30 p-2 border border-red-700 rounded">
-                    <span className="text-red-400 block font-bold">MẶT NẠ 3: GIẬN DỮ</span>
-                    Nặng nề, phá hủy chướng ngại vật.
-                </div>
+      <div className='absolute inset-0 bg-black/92 flex items-center justify-center p-6 z-50 crt-overlay'>
+        <div className='w-[820px] grid grid-cols-2 gap-6 p-6 bg-black/75 border-2 border-yellow-600/20 rounded-lg backdrop-blur-md shadow-[0_0_60px_rgba(34,197,94,0.06)] pointer-events-auto'>
+          <div className='flex flex-col items-center justify-center gap-4'>
+            <div className='w-44 h-44 bg-gradient-to-br from-neutral-800 to-neutral-700 rounded-xl flex items-center justify-center shadow-lg border border-white/6'>
+              <div className='w-32 h-32 rounded-full bg-yellow-300 flex items-center justify-center text-4xl shadow-[0_10px_30px_rgba(0,0,0,0.6)]'>
+                🙂
+              </div>
             </div>
-            <button 
-              onClick={() => setGameState(GameState.PLAYING)}
-              className="px-10 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold font-mono text-xl rounded shadow-[0_0_20px_rgba(250,204,21,0.6)] transition-all hover:scale-105 hover:tracking-widest"
-            >
-              KHỞI ĐỘNG HỆ THỐNG
-            </button>
+            <div className='text-left text-sm text-gray-300 max-w-xs'>
+              <h2 className='text-xl font-bold text-yellow-400'>
+                HÀNH TRÌNH VỀ NHÀ
+              </h2>
+              <p className='mt-2'>
+                [SYSTEM DETECTED: NEW SUBJECT] — Khởi tạo môi trường mô phỏng
+                cảm xúc.
+              </p>
+              <p className='mt-2 text-xs text-gray-400'>
+                Dùng phím <span className='font-mono'>1/2/3/4/0</span> để thay
+                đổi mặt nạ. Nhấn <span className='font-mono'>Space</span> để
+                nhảy.
+              </p>
+            </div>
+            <div className='flex gap-3 mt-4'>
+              <button
+                onClick={() => setGameState(GameState.PLAYING)}
+                className='px-6 py-3 bg-yellow-500 text-black font-bold rounded hover:scale-105 transition transform shadow-md'
+              >
+                BẮT ĐẦU
+              </button>
+              <button
+                onClick={() => setGameState(GameState.START)}
+                className='px-4 py-3 border border-yellow-600 text-yellow-200 rounded text-sm'
+              >
+                TÙY CHỌN
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className='grid grid-cols-3 gap-3 mb-4'>
+              <div className='bg-yellow-900/20 p-3 border border-yellow-700 rounded text-sm'>
+                <div className='font-bold text-yellow-300'>VUI VẺ</div>
+                Tăng tốc, nảy bật.
+              </div>
+              <div className='bg-blue-900/20 p-3 border border-blue-700 rounded text-sm'>
+                <div className='font-bold text-blue-300'>U SẦU</div>
+                Lơ lửng, chậm.
+              </div>
+              <div className='bg-red-900/20 p-3 border border-red-700 rounded text-sm'>
+                <div className='font-bold text-red-300'>GIẬN DỮ</div>
+                Phá vỡ chướng ngại.
+              </div>
+            </div>
+            <div className='bg-black/60 border border-white/6 p-3 rounded mb-3 text-sm text-gray-200'>
+              <div className='font-mono text-xs text-gray-400 mb-2'>
+                NHIỆM VỤ
+              </div>
+              <div>- Thu thập mảnh ký ức để mở ngõ về nhà.</div>
+              <div className='mt-2 text-xs text-gray-400'>
+                Lưu ý: Mặt nạ thay đổi vật lý và hành vi nhân vật.
+              </div>
+            </div>
+            <div className='flex gap-2'>
+              <button
+                onClick={() => setGameState(GameState.PLAYING)}
+                className='flex-1 px-4 py-3 bg-green-500 text-black font-bold rounded hover:bg-green-400'
+              >
+                CHƠI NGAY
+              </button>
+              <button className='px-4 py-3 bg-gray-800 border border-white/6 rounded text-sm'>
+                HƯỚNG DẪN
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -68,16 +178,20 @@ const UIOverlay: React.FC<UIProps> = ({ gameState, setGameState, health, integri
 
   if (gameState === GameState.GAME_OVER) {
     return (
-      <div className="absolute inset-0 bg-red-950/90 flex flex-col items-center justify-center text-center p-8 z-50 crt-overlay">
-        <div className="pointer-events-auto">
-            <h1 className="text-6xl font-bold text-red-500 mb-4 font-mono tracking-widest glitch-text">THẤT BẠI</h1>
-            <p className="text-red-200 text-xl mb-8 font-mono border-t border-b border-red-800 py-4">{deathReason}</p>
-            <button 
-              onClick={() => setGameState(GameState.START)}
-              className="px-8 py-3 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-bold font-mono rounded transition-colors"
-            >
-              TÁI KHỞI ĐỘNG
-            </button>
+      <div className='absolute inset-0 bg-red-950/90 flex flex-col items-center justify-center text-center p-8 z-50 crt-overlay'>
+        <div className='pointer-events-auto'>
+          <h1 className='text-6xl font-bold text-red-500 mb-4 font-mono tracking-widest glitch-text'>
+            THẤT BẠI
+          </h1>
+          <p className='text-red-200 text-xl mb-8 font-mono border-t border-b border-red-800 py-4'>
+            {deathReason}
+          </p>
+          <button
+            onClick={() => setGameState(GameState.START)}
+            className='px-8 py-3 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-bold font-mono rounded transition-colors'
+          >
+            TÁI KHỞI ĐỘNG
+          </button>
         </div>
       </div>
     );
@@ -86,144 +200,149 @@ const UIOverlay: React.FC<UIProps> = ({ gameState, setGameState, health, integri
   if (gameState === GameState.VICTORY) {
     const isTrueEnding = memories >= TOTAL_MEMORIES;
     return (
-      <div className={`absolute inset-0 ${isTrueEnding ? 'bg-yellow-900/90' : 'bg-green-900/90'} flex flex-col items-center justify-center text-center p-8 z-50 crt-overlay`}>
-        <div className="pointer-events-auto">
-            <h1 className="text-5xl font-bold text-white mb-4">{isTrueEnding ? "THOÁT KHỎI MA TRẬN" : "VỀ ĐẾN NHÀ"}</h1>
-            <p className="text-white text-xl italic mb-4">
-                {isTrueEnding 
-                    ? "S.E.R.A không thể tính toán được cảm xúc chân thật của bạn. Bạn đã tự do." 
-                    : "Bạn đã về nhà, nhưng S.E.R.A vẫn đang quan sát..."}
-            </p>
-            <button 
-              onClick={() => setGameState(GameState.START)}
-              className="px-6 py-2 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors"
-            >
-              Chơi lại
-            </button>
+      <div
+        className={`absolute inset-0 ${isTrueEnding ? "bg-yellow-900/90" : "bg-green-900/90"} flex flex-col items-center justify-center text-center p-8 z-50 crt-overlay`}
+      >
+        <div className='pointer-events-auto'>
+          <h1 className='text-5xl font-bold text-white mb-4'>
+            {isTrueEnding ? "THOÁT KHỎI MA TRẬN" : "VỀ ĐẾN NHÀ"}
+          </h1>
+          <p className='text-white text-xl italic mb-4'>
+            {isTrueEnding
+              ? "S.E.R.A không thể tính toán được cảm xúc chân thật của bạn. Bạn đã tự do."
+              : "Bạn đã về nhà, nhưng S.E.R.A vẫn đang quan sát..."}
+          </p>
+          <button
+            onClick={() => setGameState(GameState.START)}
+            className='px-6 py-2 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors'
+          >
+            Chơi lại
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      
-      {/* CRT Scanline Overlay */}
-      <div className="absolute inset-0 z-40 pointer-events-none crt-line opacity-20"></div>
+    <div className='absolute inset-0 pointer-events-none overflow-hidden'>
+      <div className='absolute inset-0 z-40 pointer-events-none crt-line opacity-20'></div>
 
-      {/* GLITCH EFFECT (Low Health) */}
       {isPlaying && isLowHealth && (
-        <div className="absolute inset-0 pointer-events-none z-0">
-          <div 
-            className="absolute inset-0 glitch-scanlines w-full h-full"
+        <div className='absolute inset-0 pointer-events-none z-0'>
+          <div
+            className='absolute inset-0 glitch-scanlines w-full h-full'
             style={{ opacity: 0.3 + glitchIntensity * 0.4 }}
           ></div>
-          <div 
-            className="absolute inset-0 w-full h-full bg-red-500/20"
+          <div
+            className='absolute inset-0 w-full h-full bg-red-500/20'
             style={{
-               mixBlendMode: 'color',
-               animation: `glitch-flash ${0.6 - glitchIntensity * 0.4}s infinite steps(2, jump-none)`,
-               opacity: 0
+              mixBlendMode: "color",
+              animation: `glitch-flash ${0.6 - glitchIntensity * 0.4}s infinite steps(2, jump-none)`,
+              opacity: 0,
             }}
           ></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-600/80 font-mono font-bold text-9xl uppercase opacity-10 blur-[2px] animate-pulse">
-             SYSTEM FAILURE
+          <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-600/80 font-mono font-bold text-9xl uppercase opacity-10 blur-[2px] animate-pulse'>
+            SYSTEM FAILURE
           </div>
         </div>
       )}
 
-      {/* S.E.R.A VISUAL TERMINAL */}
-      <div className={`absolute top-4 right-4 w-96 bg-black/90 border ${aiBorder} p-3 rounded-br-2xl shadow-lg z-30 flex gap-3 items-start transition-colors duration-500`}>
-        {/* The Eye Avatar */}
-        <div className="relative w-12 h-12 flex-shrink-0 flex items-center justify-center border border-white/10 bg-black rounded-full overflow-hidden">
-            <div className={`w-full h-full absolute opacity-20 ${aiBg} animate-pulse`}></div>
-            <div className={`w-4 h-4 rounded-full ${aiBg} shadow-[0_0_10px_currentColor]`} style={{ animation: isLowHealth ? 'glitch-anim-1 0.2s infinite' : 'pulse-eye 2s infinite' }}></div>
-            <div className="absolute w-1 h-1 bg-white rounded-full"></div>
+      <div
+        className={`absolute top-4 right-4 max-w-xs w-[22rem] bg-[rgba(7,9,14,0.56)] border border-white/6 p-3 rounded-2xl shadow-[14px_18px_30px_rgba(2,6,23,0.45),inset_-8px_-8px_18px_rgba(255,255,255,0.03)] z-30 flex gap-3 items-start transition-colors duration-500`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className='relative flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-neutral-800/60 to-neutral-700/40 flex items-center justify-center shadow-[0_8px_30px_rgba(2,6,23,0.45)] ring-1 ring-white/3'>
+          <div className='w-8 h-8 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-400 flex items-center justify-center text-sm'>🙂</div>
         </div>
 
-        <div className="flex-1 overflow-hidden">
-            <div className="flex justify-between border-b border-white/10 mb-1 pb-1">
-                <span className={`font-mono text-xs font-bold ${aiColor}`}>S.E.R.A v9.0</span>
-                <span className="animate-pulse text-xs text-white/50">● LIVE</span>
+        <div className='flex-1 overflow-hidden'>
+          <div className='flex items-center justify-between gap-3 border-b border-white/6 mb-1 pb-1'>
+            <div className={`flex items-center gap-3`}> 
+              <div className='font-mono text-xs font-semibold tracking-wide text-white/90'>S.E.R.A v9.0</div>
+              <div className='text-[10px] font-mono text-white/40'>AI</div>
             </div>
-            <div className={`font-mono text-sm h-14 overflow-y-auto leading-tight ${aiColor} custom-scrollbar pr-1`}>
-                <p>{aiMessage}</p>
-            </div>
+            <div className='animate-pulse text-xs text-white/50'>● LIVE</div>
+          </div>
+          <div
+            className={`font-mono text-sm h-14 overflow-y-auto leading-tight text-white/80 custom-scrollbar pr-1 motion-reduce:overflow-auto`}
+          >
+            <p className='text-sm'>{aiMessage}</p>
+          </div>
         </div>
       </div>
 
-      {/* VIGNETTE MASK */}
       {mask !== MaskType.NONE && (
-        <div 
-          className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-1000"
+        <div
+          className='absolute inset-0 pointer-events-none z-0 transition-opacity duration-1000'
           style={{
-             background: 'radial-gradient(circle, transparent 50%, rgba(0,0,0,0.6) 100%)',
-             opacity: 1
+            background:
+              "radial-gradient(circle, transparent 50%, rgba(0,0,0,0.6) 100%)",
+            opacity: 1,
           }}
         ></div>
       )}
 
-      {/* TOP LEFT STATS */}
-      <div className="absolute top-4 left-4 flex flex-col gap-3 z-30 pointer-events-none w-72">
-        {/* Health */}
-        <div className="bg-black/60 backdrop-blur border-l-4 border-l-green-500 pl-3 py-2 pr-2 relative clip-path-slanted">
-            <div className="flex justify-between text-[10px] font-mono text-gray-400 mb-1">
-                <span>VITALS</span>
-                <span className={health < 30 ? "text-red-500 animate-pulse" : "text-green-500"}>{Math.round(health)}%</span>
+      <div className='absolute top-4 left-4 flex flex-col gap-3 z-30 pointer-events-none w-72'>
+        <div className="neumorph-card px-3 py-3 w-full">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <div className="text-[10px] font-mono text-gray-400">VITALS</div>
+            <div className="text-sm font-mono font-semibold" aria-hidden>
+              <span className={health < 30 ? 'text-red-400 animate-pulse' : 'text-green-300'}>{Math.round(health)}%</span>
             </div>
-            <div className="w-full h-1.5 bg-gray-800">
-                <div className={`h-full ${health < 30 ? 'bg-red-500' : 'bg-green-500'} transition-all duration-300`} style={{ width: `${health}%` }}></div>
-            </div>
+          </div>
+          <LiquidBar value={health} color={health < 30 ? '#ff6b6b' : '#34d399'} ariaLabel="Health" />
         </div>
 
-        {/* Integrity */}
-        <div className="bg-black/60 backdrop-blur border-l-4 border-l-cyan-500 pl-3 py-2 pr-2 relative clip-path-slanted">
-            <div className="flex justify-between text-[10px] font-mono text-gray-400 mb-1">
-                <span>IDENTITY INTEGRITY</span>
-                <span className="text-cyan-500">{Math.round(integrity)}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-gray-800">
-                <div className="h-full bg-cyan-400 transition-all duration-300 shadow-[0_0_10px_cyan]" style={{ width: `${integrity}%` }}></div>
-            </div>
+        <div className="neumorph-card px-3 py-3 w-full">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <div className="text-[10px] font-mono text-gray-400">IDENTITY INTEGRITY</div>
+            <div className="text-sm font-mono font-semibold text-cyan-300">{Math.round(integrity)}%</div>
+          </div>
+          <LiquidBar value={integrity} color="#60a5fa" ariaLabel="Identity integrity" />
         </div>
 
-        {/* Memory */}
-        <div className="bg-black/60 backdrop-blur border border-yellow-500/20 px-3 py-1 flex items-center justify-between text-yellow-500 font-mono text-sm clip-path-slanted">
-            <span>DATA FRAGMENTS</span>
-            <span className="font-bold">{memories} / {TOTAL_MEMORIES}</span>
+        <div className="neumorph-card px-3 py-2 flex items-center justify-between gap-3" aria-hidden>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-300/80 to-yellow-400/40 flex items-center justify-center shadow-[0_8px_20px_rgba(250,204,21,0.18)]">
+              <span className="text-sm">✨</span>
+            </div>
+            <div className="text-sm font-mono text-yellow-300">DATA FRAGMENTS</div>
+          </div>
+          <div className="text-sm font-bold text-white">{memories} / {TOTAL_MEMORIES}</div>
         </div>
       </div>
 
-      {/* BOTTOM BAR - MASKS */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 z-30 pointer-events-auto">
+      <div className='absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 z-30 pointer-events-auto'>
         {MASKS.map((m) => {
           const isActive = mask === m.id;
           return (
-            <div 
+            <div
               key={m.id}
-              className={`
-                group relative flex flex-col items-center justify-center w-12 h-12 rounded bg-black/80 border 
-                transition-all duration-200 cursor-pointer overflow-visible
-                ${isActive 
-                  ? 'border-yellow-400 -translate-y-2 shadow-[0_0_15px_rgba(250,204,21,0.4)]' 
-                  : 'border-gray-700 opacity-60 hover:opacity-100 hover:-translate-y-1'}
-              `}
+              className={`group relative flex flex-col items-center justify-center min-w-[56px] min-h-[56px] rounded-2xl bg-[rgba(255,255,255,0.02)] ring-1 ring-white/3 transition-transform duration-300 cursor-pointer overflow-visible shadow-[8px_10px_20px_rgba(2,6,23,0.28),inset_-6px_-6px_12px_rgba(255,255,255,0.02)] ${isActive ? 'translate-y-[-6px] border-2 border-yellow-300 shadow-[0_18px_40px_rgba(250,204,21,0.18)]' : 'border-gray-700/30 hover:translate-y-[-3px] hover:shadow-[0_12px_30px_rgba(2,6,23,0.18)]'}`}
               onClick={() => {
-                  const event = new KeyboardEvent('keydown', { code: `Digit${m.key}` });
-                  window.dispatchEvent(event);
+                const event = new KeyboardEvent("keydown", {
+                  code: `Digit${m.key}`,
+                });
+                window.dispatchEvent(event);
               }}
+              role="button"
+              aria-label={`${m.label} (key ${m.key})`}
             >
-              <span className="text-xl filter drop-shadow-md">{m.icon}</span>
-              <span className="absolute top-1 right-1 text-[8px] font-mono text-gray-500">{m.key}</span>
-              
-              {/* Tooltip */}
-              <div className={`
-                absolute bottom-14 left-1/2 -translate-x-1/2 w-32 bg-black/90 border border-gray-600 p-2 text-center rounded
-                opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50
-                ${isActive ? 'opacity-100 border-yellow-500' : ''}
-              `}>
-                  <div className={`font-bold text-xs ${isActive ? 'text-yellow-400' : 'text-white'}`}>{m.label}</div>
-                  <div className="text-[9px] text-gray-400 uppercase tracking-tighter">{m.desc}</div>
+              <span className='text-xl filter drop-shadow-md'>{m.icon}</span>
+              <span className='absolute top-1 right-1 text-[8px] font-mono text-gray-500'>
+                {m.key}
+              </span>
+
+              <div
+                className={`absolute bottom-16 left-1/2 -translate-x-1/2 w-40 bg-[rgba(7,9,14,0.7)] ring-1 ring-white/4 p-3 text-center rounded-xl shadow-[inset_-6px_-6px_12px_rgba(255,255,255,0.02)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 ${isActive ? 'opacity-100 scale-100 border border-yellow-300' : 'scale-95'}`}
+              >
+                <div className={`font-bold text-sm ${isActive ? 'text-yellow-300' : 'text-white'}`}>
+                  {m.label}
+                </div>
+                <div className='text-[11px] text-gray-400 uppercase tracking-tighter mt-1'>
+                  {m.desc}
+                </div>
               </div>
             </div>
           );
