@@ -9,7 +9,6 @@
 - Install deps: `npm install` (Node.js required).
 - Dev server: `npm run dev` (Vite on port 3000, host 0.0.0.0).
 - Build: `npm run build`; Preview: `npm run preview`.
-- Env: place `GEMINI_API_KEY=<key>` in .env.local; Vite injects as `process.env.GEMINI_API_KEY` (defined in [vite.config.ts](../vite.config.ts)).
 
 ## Gameplay & Simulation
 
