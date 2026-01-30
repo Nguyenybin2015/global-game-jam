@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import GameCanvas from './components/GameCanvas';
-import UIOverlay from './components/UIOverlay';
-import { GameState, MaskType } from './types';
+import React, { useState, useEffect, useRef } from "react";
+import GameCanvas from "./components/GameCanvas";
+import UIOverlay from "./components/UIOverlay";
+import { GameState, MaskType } from "./types";
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -11,13 +11,14 @@ const App: React.FC = () => {
   const [currentLevel, setCurrentLevel] = useState(0);
   const [deathReason, setDeathReason] = useState("");
   const [collectedMemories, setCollectedMemories] = useState(0);
-  const [aiMessage, setAiMessage] = useState<string>("S.E.R.A: System Initialized. Monitoring subject.");
+  const [aiMessage, setAiMessage] = useState<string>(
+    "S.E.R.A: System Initialized. Monitoring subject.",
+  );
 
   return (
-    <div className="relative w-screen h-screen bg-neutral-900 flex justify-center items-center overflow-hidden">
-      <div className="relative shadow-2xl rounded-lg overflow-hidden border border-neutral-700" style={{ width: 800, height: 450 }}>
-        
-        <GameCanvas 
+    <div className='relative w-screen h-screen bg-neutral-900 flex justify-center items-center overflow-hidden'>
+      <div className='relative shadow-2xl rounded-lg overflow-hidden border border-neutral-700 w-full h-full'>
+        <GameCanvas
           gameState={gameState}
           setGameState={setGameState}
           setCurrentHealth={setCurrentHealth}
@@ -29,7 +30,7 @@ const App: React.FC = () => {
           setAiMessage={setAiMessage}
         />
 
-        <UIOverlay 
+        <UIOverlay
           gameState={gameState}
           setGameState={setGameState}
           health={currentHealth}
@@ -40,7 +41,6 @@ const App: React.FC = () => {
           memories={collectedMemories}
           aiMessage={aiMessage}
         />
-        
       </div>
     </div>
   );
