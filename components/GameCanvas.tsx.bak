@@ -212,16 +212,7 @@ const drawFace = (
 
       // thin rim stroke for crispness + subtle colored rim to match mask
       ctx.lineWidth = 0.8;
-      ctx.strokeStyle =
-        mask === MaskType.NONE
-          ? "rgba(0,0,0,0.14)"
-          : mask === MaskType.CHILD
-            ? "rgba(241,196,15,0.25)"
-            : mask === MaskType.STUDENT
-              ? "rgba(52,152,219,0.18)"
-              : mask === MaskType.WORKER
-                ? "rgba(231,76,60,0.18)"
-                : "rgba(149,165,166,0.14)";
+      ctx.strokeStyle = mask === MaskType.NONE ? "rgba(0,0,0,0.14)" : (mask === MaskType.CHILD ? "rgba(241,196,15,0.25)" : (mask === MaskType.STUDENT ? "rgba(52,152,219,0.18)" : (mask === MaskType.WORKER ? "rgba(231,76,60,0.18)" : "rgba(149,165,166,0.14)")));
       ctx.stroke();
 
       // subtle inner vignette to give depth
@@ -442,7 +433,7 @@ const drawFace = (
   const mouthY = mouthBaseY + Math.sin(Date.now() * 0.01) * 0.6 + expr.amp * 4;
   const smileW = 7 + Math.abs(expr.amp) * 4;
   const smileH = (expr.smile - expr.amp * 0.3) * 6;
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1.2;
   ctx.strokeStyle = "#000";
   ctx.beginPath();
   if (mask === MaskType.WORKER) {
@@ -467,9 +458,16 @@ const drawFace = (
     ctx.fill();
     // faint tooth separator for extra detail
     ctx.strokeStyle = "rgba(0,0,0,0.06)";
-    ctx.lineWidth = 1.0;
-    ctx.strokeStyle = "rgba(0,0,0,0.18)";
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-1 + lookX, mouthY - 0.2);
+    ctx.lineTo(1 + lookX, mouthY - 0.2);
     ctx.stroke();
+  }
+
+  // slight corner creases for expression (when not WORKER/SOCIAL)
+  if (mask !== MaskType.WORKER && mask !== MaskType.SOCIAL) {
+    ctx.strokeStyle = "rgba(0,0,0,0.12)";
     ctx.lineWidth = 0.8;
     ctx.beginPath();
     ctx.moveTo(-smileW - 1 + lookX, mouthY - 1);
@@ -501,39 +499,27 @@ const drawFace = (
 
     // subtle freckles for true self to add character
     if (mask === MaskType.NONE) {
-      ctx.fillStyle = "rgba(0,0,0,0.06)";
-      ctx.beginPath();
-      ctx.arc(-12, -34, 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(-18, -30, 0.8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(-22, -36, 0.8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(12, -34, 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(18, -30, 0.8, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      ctx.beginPath(); ctx.arc(-12, -34, 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-18, -30, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-22, -36, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(12, -34, 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(18, -30, 0.8, 0, Math.PI * 2); ctx.fill();
     }
   }
 
   // Hair tuft for child + subtle hair for true self
   if (mask === MaskType.CHILD) {
-    // richer hair tuft with gradient + small highlight
-    const hg = ctx.createLinearGradient(12, -64, 28, -52);
-    hg.addColorStop(0, "#f39c12");
-    hg.addColorStop(1, "#d35400");
-    ctx.fillStyle = hg;
+    ctx.fillStyle = "#f39c12";
     ctx.beginPath();
-    ctx.ellipse(20, -56, 9, 6, -0.2, 0, Math.PI * 2);
+    ctx.moveTo(8, -62);
+    ctx.quadraticCurveTo(12, -66, 16, -60);
+    ctx.quadraticCurveTo(12, -62, 8, -62);
     ctx.fill();
-    // strand highlight
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    // extra strand
     ctx.beginPath();
-    ctx.ellipse(16, -58, 2.2, 1.6, -0.2, 0, Math.PI * 2);
+    ctx.moveTo(-6, -64);
+    ctx.quadraticCurveTo(-10, -68, -14, -62);
     ctx.fill();
   } else if (mask === MaskType.NONE) {
     // subtle loose hair layer for true self (soft shadow)
@@ -686,14 +672,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       const ctx = canvas.getContext("2d");
       if (ctx) {
         // scale by cover*dpr and translate by offset*dpr so game coords remain 0..CANVAS_*
-        ctx.setTransform(
-          cover * dpr,
-          0,
-          0,
-          cover * dpr,
-          Math.round(offsetX * dpr),
-          Math.round(offsetY * dpr),
-        );
+        ctx.setTransform(cover * dpr, 0, 0, cover * dpr, Math.round(offsetX * dpr), Math.round(offsetY * dpr));
       }
     };
     resize();
@@ -1316,9 +1295,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // whether to render extra high-fidelity details (controlled from HUD / reduced-motion aware)
     const highDetail = !!(l.effectsEnabled && l.highDetailEnabled);
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
     gradient.addColorStop(0, config.bgGradient[0]);
     gradient.addColorStop(1, config.bgGradient[1]);
@@ -1713,7 +1689,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fill();
     }
 
-    // thin crisp rim/stroke to enhance silhouette on all displays\n    ctx.lineWidth = 1.8;\n    ctx.strokeStyle = "rgba(0,0,0,0.22)";\n    ctx.stroke();
+    // thin crisp rim/stroke to enhance silhouette on all displays
+    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = "rgba(0,0,0,0.16)";
+    ctx.stroke();
+
     if (p.mask !== MaskType.NONE) {
       ctx.strokeStyle = "rgba(189,195,199,0.5)";
       ctx.lineWidth = 1.2;
