@@ -16,5 +16,6 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "."),
       },
     },
+    base: env.VITE_BASE_PATH || "/global-game-jam/",
   };
 });
