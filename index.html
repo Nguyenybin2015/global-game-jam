@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hành Trình Về Nhà</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,700;1,300&family=Roboto:wght@400;700&family=Share+Tech+Mono&display=swap');
+      
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #050505;
+        font-family: 'Roboto', sans-serif;
+      }
+      .font-serif { font-family: 'Merriweather', serif; }
+      .font-mono { font-family: 'Share Tech Mono', monospace; }
+
+      /* Utility Classes */
+      .clip-path-slanted {
+        clip-path: polygon(0 0, 100% 0, 92% 100%, 0% 100%);
+      }
+
+      /* Custom Scrollbar for Terminal */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(0,0,0,0.3);
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(0, 255, 0, 0.3);
+        border-radius: 2px;
+      }
+      .text-red-500 .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 0, 0, 0.3);
+      }
+
+      /* Glitch Animations */
+      @keyframes glitch-anim-1 {
+        0% { clip-path: inset(20% 0 80% 0); transform: translate(-2px, 1px); }
+        20% { clip-path: inset(60% 0 10% 0); transform: translate(2px, -1px); }
+        40% { clip-path: inset(40% 0 50% 0); transform: translate(-2px, 2px); }
+        60% { clip-path: inset(80% 0 5% 0); transform: translate(2px, -2px); }
+        80% { clip-path: inset(10% 0 70% 0); transform: translate(-1px, 1px); }
+        100% { clip-path: inset(30% 0 50% 0); transform: translate(1px, -1px); }
+      }
+
+      @keyframes glitch-flash {
+        0% { opacity: 0; transform: scale(1); filter: hue-rotate(0deg); }
+        5% { opacity: 0.8; transform: scale(1.02) translateX(-2px); filter: hue-rotate(90deg); }
+        10% { opacity: 0; transform: scale(1); }
+        15% { opacity: 0.5; transform: scale(1.01) translateX(2px); filter: invert(1); }
+        20% { opacity: 0; }
+        100% { opacity: 0; }
+      }
+
+      /* AI Eye Animation */
+      @keyframes pulse-eye {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 10px currentColor; }
+        50% { transform: scale(1.1); box-shadow: 0 0 20px currentColor; }
+      }
+      @keyframes scan-line {
+        0% { transform: translateY(-100%); }
+        100% { transform: translateY(100%); }
+      }
+
+      .glitch-scanlines {
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0px,
+          transparent 2px,
+          rgba(255, 0, 0, 0.2) 3px,
+          rgba(0, 0, 255, 0.2) 4px
+        );
+        background-size: 100% 4px;
+        mix-blend-mode: color-dodge;
+      }
+
+      .crt-overlay {
+        background-image: radial-gradient(circle, rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 100%);
+        pointer-events: none;
+      }
+      
+      .crt-line {
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.05);
+        animation: scan-line 6s linear infinite;
+        pointer-events: none;
+        z-index: 40;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
