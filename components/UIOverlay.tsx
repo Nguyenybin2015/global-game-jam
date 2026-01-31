@@ -85,7 +85,7 @@ const UIOverlay: React.FC<UIProps> = ({
   // Procedural-level toggle (kept locally in the HUD and emitted to canvas)
   const [procMode, setProcMode] = useState(false);
 
-  // Campaign modal + completed-levels (used by the 20-level campaign view)
+  // Campaign modal + completed-levels (used by the 10-level campaign view)
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [completedLevels, setCompletedLevels] = useState<Set<number>>(
     new Set(),
@@ -501,10 +501,10 @@ const UIOverlay: React.FC<UIProps> = ({
                         new CustomEvent("proc-levels", { detail: v }),
                       );
                     }}
-                    aria-label='Bật chiến dịch 20 màn'
+                    aria-label='Bật chiến dịch 10 màn'
                     className='w-4 h-4 bg-black/20 rounded'
                   />
-                  <span className='font-semibold'>Chiến dịch — 20 màn</span>
+                  <span className='font-semibold'>Chiến dịch — 10 màn</span>
                 </label>
                 <div className='text-xs text-gray-400'>
                   Tải trước 20 bản đồ, không sinh vô hạn
@@ -551,7 +551,7 @@ const UIOverlay: React.FC<UIProps> = ({
                 aria-haspopup="dialog"
                 aria-expanded={showCampaignModal}
               >
-                CHIẾN DỊCH — 20 MÀN
+                CHIẾN DỊCH — 10 MÀN
               </button>
             </div>
 
@@ -591,7 +591,7 @@ const UIOverlay: React.FC<UIProps> = ({
                     BẢNG XẾP HẠNG
                   </div>
                   {/* <div className='text-[11px] text-gray-400'>
-                    (Chọn: màn thường / chiến dịch 20 màn)
+                    (Chọn: màn thường / chiến dịch 10 màn)
                   </div> */}
                 </div>
 
@@ -609,7 +609,7 @@ const UIOverlay: React.FC<UIProps> = ({
                       className={`px-3 py-1 text-[12px] rounded-md ${leaderboardTab === "campaign" ? "bg-white/6 text-white" : "text-gray-300"}`}
                       aria-pressed={leaderboardTab === "campaign"}
                     >
-                      Chiến dịch — 20 màn
+                      Chiến dịch — 10 màn
                     </button>
                   </div>
 
@@ -682,18 +682,18 @@ const UIOverlay: React.FC<UIProps> = ({
           </div>
         </div>
 
-        {/* Campaign modal: list 20 fixed levels, show which were played (3★ when completed) */}
+        {/* Campaign modal: list 10 fixed levels, show which were played (3★ when completed) */}
         {showCampaignModal && (
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Chiến dịch — 20 màn"
+            aria-label="Chiến dịch — 10 màn"
             className="fixed inset-0 z-50 flex items-center justify-center p-6"
           >
             <div className="w-[760px] max-w-full bg-black/85 border border-white/6 rounded-lg p-5 text-sm text-gray-200 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <div className="text-lg font-bold">Chiến dịch — 20 màn</div>
+                  <div className="text-lg font-bold">Chiến dịch — 10 màn</div>
                   <div className="text-xs text-gray-400">
                     Danh sách bản đồ cố định. Màn đã chơi sẽ được đánh dấu 3★.
                   </div>
@@ -727,7 +727,7 @@ const UIOverlay: React.FC<UIProps> = ({
               </div>
 
               <div className="grid grid-cols-4 gap-3 max-h-[56vh] overflow-auto pr-2">
-                {Array.from({ length: 20 }).map((_, i) => {
+                {Array.from({ length: 10 }).map((_, i) => {
                   const played = completedLevels.has(i);
                   const name =
                     i === 0
@@ -888,7 +888,7 @@ const UIOverlay: React.FC<UIProps> = ({
                         1
                       </div>
                       <div className="text-sm">
-                        Chiến dịch — 20 màn (bấm để mở danh sách)
+                        Chiến dịch — 10 màn (bấm để mở danh sách)
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1044,7 +1044,7 @@ const UIOverlay: React.FC<UIProps> = ({
           {procMode && lastCampaignRun && (
             <div className="mb-3 text-sm text-amber-100">
               <div>
-                Chiến dịch 20 màn — thời gian:{" "}
+                Chiến dịch 10 màn — thời gian:{" "}
                 <span className="font-mono">
                   {formatTime(lastCampaignRun.totalTimeMs)}
                 </span>
@@ -1060,7 +1060,7 @@ const UIOverlay: React.FC<UIProps> = ({
 
           {procMode && !lastCampaignRun && (
             <div className="text-sm text-amber-200 mb-4">
-              Chiến dịch 20 màn: <span className="font-semibold">BẬT</span>
+              Chiến dịch 10 màn: <span className="font-semibold">BẬT</span>
             </div>
           )}
 

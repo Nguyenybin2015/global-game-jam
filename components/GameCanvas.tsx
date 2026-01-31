@@ -94,7 +94,7 @@ const LEVELS: LevelConfig[] = [
   },
 ];
 
-const PREGENERATED_LEVEL_COUNT = 20; // total campaign levels (includes handcrafted LEVELS)
+const PREGENERATED_LEVEL_COUNT = 10; // total campaign levels (includes handcrafted LEVELS)
 
 // Dialogs per level keyed by mask — kept separate so each map can provide
 // its own set of inner-thoughts. Only level 0 (map 1) is populated here.
@@ -965,6 +965,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const map1Image = useRef<HTMLImageElement | null>(null);
   const map1Image2 = useRef<HTMLImageElement | null>(null);
   const trapMap1Image = useRef<HTMLImageElement | null>(null);
+  // map2 assets
+  const map2Image = useRef<HTMLImageElement | null>(null);
+  const map2Image2 = useRef<HTMLImageElement | null>(null);
+  const ground2Image = useRef<HTMLImageElement | null>(null);
+  // map3 assets
+  const map3Image = useRef<HTMLImageElement | null>(null);
+  const map3Image2 = useRef<HTMLImageElement | null>(null);
+  const ground3Image = useRef<HTMLImageElement | null>(null);
+  const groundImage = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
     try {
       const img = new Image();
@@ -1017,11 +1026,130 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     } catch (err) {
       // ignore
     }
+    // preload map2 backgrounds (map index 1)
+    try {
+      const m2 = new Image();
+      m2.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_2/background_map2.png`,
+        import.meta.url,
+      ).href;
+      m2.onload = () => {
+        map2Image.current = m2;
+      };
+      m2.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    try {
+      const m22 = new Image();
+      m22.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_2/background_map2.1.png`,
+        import.meta.url,
+      ).href;
+      m22.onload = () => {
+        map2Image2.current = m22;
+      };
+      m22.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+
+    // preload map3 backgrounds (map index 2)
+    try {
+      const m3 = new Image();
+      m3.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_3/school.png`,
+        import.meta.url,
+      ).href;
+      m3.onload = () => {
+        map3Image.current = m3;
+      };
+      m3.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    try {
+      const m32 = new Image();
+      m32.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_3/school1.jpg`,
+        import.meta.url,
+      ).href;
+      m32.onload = () => {
+        map3Image2.current = m32;
+      };
+      m32.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+
+    // preload a generic ground texture (public/assets/ground.png)
+    try {
+      const g = new Image();
+      g.src = new URL(
+        `${import.meta.env.BASE_URL}assets/ground.png`,
+        import.meta.url,
+      ).href;
+      g.onload = () => {
+        groundImage.current = g;
+      };
+      g.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload alternate ground for map2
+    try {
+      const g2 = new Image();
+      g2.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_2/ground_2.png`,
+        import.meta.url,
+      ).href;
+      g2.onload = () => {
+        ground2Image.current = g2;
+      };
+      g2.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload alternate ground for map3
+    try {
+      const g3 = new Image();
+      g3.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_3/ground_3.jpg`,
+        import.meta.url,
+      ).href;
+      g3.onload = () => {
+        ground3Image.current = g3;
+      };
+      g3.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
 
     return () => {
       map1Image.current = null;
       map1Image2.current = null;
       trapMap1Image.current = null;
+      map2Image.current = null;
+      map2Image2.current = null;
+      ground2Image.current = null;
+      map3Image.current = null;
+      map3Image2.current = null;
+      ground3Image.current = null;
+      groundImage.current = null;
     };
   }, []);
 
@@ -2147,6 +2275,59 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
+    } else if (
+      l.index === 1 &&
+      map2Image.current &&
+      map2Image.current.complete
+    ) {
+      try {
+        // base/background layer for map2
+        ctx.drawImage(map2Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // optional parallax overlay layer when second map2 image is available
+        if (map2Image2.current && map2Image2.current.complete) {
+          const parallaxFactor = 0.36; // slightly different parallax
+          const scroll = (l.cameraX * parallaxFactor) % CANVAS_WIDTH;
+          ctx.save();
+          ctx.globalAlpha = 0.95;
+          ctx.drawImage(
+            map2Image2.current,
+            -scroll,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+          );
+          ctx.drawImage(
+            map2Image2.current,
+            -scroll + CANVAS_WIDTH,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+          );
+          ctx.restore();
+        }
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 2 &&
+      map3Image.current &&
+      map3Image.current.complete
+    ) {
+      try {
+        // Only draw base background for map3 (no overlay)
+        ctx.drawImage(map3Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
     } else {
       const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
       gradient.addColorStop(0, config.bgGradient[0]);
@@ -2166,9 +2347,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const shakeY = (Math.random() - 0.5) * l.shake;
 
     // Background
-    // For level 0 we rely on the photographic backgrounds — skip extra
+    // For level 0 and 2 we rely on the photographic backgrounds — skip extra
     // decorative overlay elements which can wash out the images.
-    if (l.index !== 0) {
+    if (l.index !== 0 && l.index !== 2) {
       ctx.save();
       ctx.translate(shakeX + glitchOffsetX, shakeY);
       const totalW = CANVAS_WIDTH + 200;
@@ -2190,13 +2371,49 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Game World
     ctx.translate(-l.cameraX + shakeX + glitchOffsetX, shakeY);
-    ctx.fillStyle = config.groundColor;
-    ctx.fillRect(
-      0,
-      CANVAS_HEIGHT - GROUND_HEIGHT,
-      config.length + 800,
-      GROUND_HEIGHT,
-    );
+    // choose ground image per-map (map2 uses ground2Image, map3 uses ground3Image)
+    const groundImg =
+      l.index === 1
+        ? ground2Image.current
+        : l.index === 2
+          ? ground3Image.current
+          : groundImage.current;
+    if (groundImg && groundImg.complete) {
+      try {
+        const img = groundImg;
+        const gw = img.width;
+        const gh = img.height;
+        // scale image to the ground height
+        const scale = GROUND_HEIGHT / Math.max(1, gh);
+        const drawW = Math.max(16, Math.round(gw * scale));
+        const totalW = config.length + 800;
+        for (let tx = 0; tx < totalW; tx += drawW) {
+          ctx.drawImage(
+            img,
+            tx,
+            CANVAS_HEIGHT - GROUND_HEIGHT,
+            drawW,
+            GROUND_HEIGHT,
+          );
+        }
+      } catch (err) {
+        ctx.fillStyle = config.groundColor;
+        ctx.fillRect(
+          0,
+          CANVAS_HEIGHT - GROUND_HEIGHT,
+          config.length + 800,
+          GROUND_HEIGHT,
+        );
+      }
+    } else {
+      ctx.fillStyle = config.groundColor;
+      ctx.fillRect(
+        0,
+        CANVAS_HEIGHT - GROUND_HEIGHT,
+        config.length + 800,
+        GROUND_HEIGHT,
+      );
+    }
 
     if (l.index === 4) {
       const hx = config.length + 50;
@@ -2673,7 +2890,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className='block w-full h-full'
+      className="block w-full h-full"
     />
   );
 };
