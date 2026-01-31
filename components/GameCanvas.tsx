@@ -959,6 +959,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     _lastTimerUpdate: 0,
     // campaign timing (used for PREGENERATED campaign runs)
     campaignStartTime: 0,
+
+    // practice (short interactive demo state)
+    practiceActive: false,
+    practiceExpect: "right",
+    practiceStarted: 0,
+    practiceTimeout: 0,
   });
 
   // Preload map 1 background image (served from public/)
@@ -1730,14 +1736,52 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       player.current.pupilY = py;
     };
 
+    // Practice: start a short interactive movement check (UI dispatches 'practice-move')
+    const onPracticeMove = (ev: Event) => {
+      const d: any = (ev as CustomEvent).detail || {};
+      levelState.current.practiceActive = true;
+      levelState.current.practiceExpect = d.expect || "right";
+      levelState.current.practiceStarted = Date.now();
+      levelState.current.practiceTimeout = d.timeoutMs || 2000;
+      // ensure canvas is focused so keypresses register
+      try {
+        const c = canvasRef.current;
+        if (c) {
+          c.tabIndex = c.tabIndex || 0;
+          c.focus();
+        }
+      } catch (err) {
+        /* ignore */
+      }
+    };
+
+    const onPracticeInput = (ev: Event) => {
+      const d: any = (ev as CustomEvent).detail || {};
+      if (!levelState.current.practiceActive) return;
+      if (levelState.current.practiceExpect === "right" && d.key === "right") {
+        levelState.current.practiceActive = false;
+        window.dispatchEvent(new CustomEvent("practice-success"));
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("pointermove", handlePointer);
+    window.addEventListener("practice-move", onPracticeMove as EventListener);
+    window.addEventListener("practice-input", onPracticeInput as EventListener);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("pointermove", handlePointer);
+      window.removeEventListener(
+        "practice-move",
+        onPracticeMove as EventListener,
+      );
+      window.removeEventListener(
+        "practice-input",
+        onPracticeInput as EventListener,
+      );
     };
   }, [gameState]);
 
@@ -1897,7 +1941,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         levelState.current.preGeneratedMode = true;
         levelState.current.campaignStartTime = Date.now();
       }
+
+      // Generate the requested pre-generated level then reset player vitals
+      // so starting a campaign always begins from a clean state (fixes bug
+      // where players would immediately die/lose progress when launching
+      // a campaign while low on health/integrity).
       generateLevel(target);
+
+      // reset player progress/stats to the canonical fresh-run values
+      player.current.health = 100;
+      player.current.integrity = 100;
+      player.current.memoriesCollected = 0;
+      setCurrentHealth(100);
+      setCurrentIntegrity(100);
+      setCollectedMemories(0);
+
+      levelState.current.campaignStartTime = Date.now();
+      setAiMessage("S.E.R.A: Bắt đầu chiến dịch.");
+      try {
+        setGameState(GameState.PLAYING);
+      } catch (err) {}
     };
 
     window.addEventListener("bg-preset", onPreset as EventListener);
@@ -1915,6 +1978,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     window.addEventListener(
       "start-pregen-level",
       onStartPreGenLevel as EventListener,
+    );
+
+    // Allow other UI pieces to push a short AI/feedback message to the HUD
+    const onPlayerFeedback = (ev: Event) => {
+      const d: any = (ev as CustomEvent).detail || {};
+      if (d && typeof d.msg === "string") setAiMessage(d.msg);
+    };
+    window.addEventListener(
+      "player-feedback",
+      onPlayerFeedback as EventListener,
     );
 
     return () => {
@@ -1983,6 +2056,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const update = () => {
     const p = player.current;
     const l = levelState.current;
+
+    if (l.practiceActive) {
+      const now = Date.now();
+      const elapsed = now - (l.practiceStarted || now);
+      if (l.practiceExpect === "right" && keys.current.right) {
+        l.practiceActive = false;
+        window.dispatchEvent(new CustomEvent("practice-success"));
+      } else if (elapsed >= (l.practiceTimeout || 2000)) {
+        l.practiceActive = false;
+        window.dispatchEvent(new CustomEvent("practice-timeout"));
+      }
+    }
 
     p.scaleX += (1 - p.scaleX) * 0.1;
     p.scaleY += (1 - p.scaleY) * 0.1;
@@ -3084,12 +3169,47 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => cancelAnimationFrame(requestRef.current);
   }, [gameState]);
 
+  // allow external UI to focus the canvas (helps ensure input works immediately
+  // after pressing START and avoids an apparent 'black'/unresponsive first frame)
+  useEffect(() => {
+    const onFocusRequest = () => {
+      const c = canvasRef.current;
+      try {
+        if (c) {
+          // make focusable then focus
+          c.tabIndex = c.tabIndex || 0;
+          c.focus();
+        }
+      } catch (err) {
+        /* ignore */
+      }
+      // If canvas has no obstacles (first-frame), regenerate current level to
+      // ensure visuals are populated immediately.
+      try {
+        if (levelState.current.obstacles.length === 0)
+          generateLevel(levelState.current.index);
+      } catch (err) {
+        /* ignore */
+      }
+    };
+    window.addEventListener(
+      "focus-game-canvas",
+      onFocusRequest as EventListener,
+    );
+    return () =>
+      window.removeEventListener(
+        "focus-game-canvas",
+        onFocusRequest as EventListener,
+      );
+  }, []);
+
   return (
     <canvas
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className="block w-full h-full"
+      className='block w-full h-full'
+      tabIndex={0}
     />
   );
 };
