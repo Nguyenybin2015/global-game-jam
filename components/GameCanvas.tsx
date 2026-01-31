@@ -2330,7 +2330,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       setCurrentIntegrity(val);
     }
     if (p.health <= 0) {
-      setDeathReason("S.E.R.A: Đối tượng đã ngưng hoạt động.");
+      // setDeathReason("S.E.R.A: Đối tượng đã ngưng hoạt động.");
       // if this was an endless run, persist the result (levels cleared)
       if (levelState.current.endlessMode) {
         const levels = levelState.current.endlessLevelsCompleted || 0;
