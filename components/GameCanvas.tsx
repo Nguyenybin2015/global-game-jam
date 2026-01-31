@@ -968,7 +968,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   useEffect(() => {
     try {
       const img = new Image();
-      img.src = "public/assets/maps/map_1/background_1.png";
+      // Prefer a bundler-resolvable `new URL(...)` (works if asset is moved into `src/`).
+      // Keep BASE_URL so the current `public/assets/...` layout continues to work
+      // when deployed to a repo subpath (GitHub Pages).
+      img.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_1/background_1.png`,
+        import.meta.url,
+      ).href;
       img.onload = () => {
         map1Image.current = img;
       };
@@ -981,7 +987,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // also preload secondary background
     try {
       const img2 = new Image();
-      img2.src = "public/assets/maps/map_1/background_2.png";
+      img2.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_1/background_2.png`,
+        import.meta.url,
+      ).href;
       img2.onload = () => {
         map1Image2.current = img2;
       };
@@ -995,7 +1004,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // preload trap image used for map 1 walls
     try {
       const t = new Image();
-      t.src = "public/assets/maps/map_1/traps/trap_map1.png";
+      t.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_1/traps/trap_map1.png`,
+        import.meta.url,
+      ).href;
       t.onload = () => {
         trapMap1Image.current = t;
       };
@@ -2661,7 +2673,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className="block w-full h-full"
+      className='block w-full h-full'
     />
   );
 };
