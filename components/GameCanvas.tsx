@@ -96,6 +96,22 @@ const LEVELS: LevelConfig[] = [
 
 const PREGENERATED_LEVEL_COUNT = 20; // total campaign levels (includes handcrafted LEVELS)
 
+// Dialogs per level keyed by mask — kept separate so each map can provide
+// its own set of inner-thoughts. Only level 0 (map 1) is populated here.
+const LEVEL_DIALOGS: Record<number, Partial<Record<MaskType, string>>> = {
+  0: {
+    [MaskType.CHILD]:
+      "Mọi thứ trông thật to...\nvà cũng thật thú vị.\nMình muốn chạy, muốn nhảy,\nmình muốn chạm vào tất cả.",
+    [MaskType.STUDENT]:
+      "Sao mình lại chậm thế này?\nỞ đây... có gì đâu mà vui?",
+    [MaskType.WORKER]:
+      "Mấy thứ này thật vướng víu.\nMình chỉ muốn phá cho xong.",
+    [MaskType.SOCIAL]:
+      "Mình nên đi thẳng, không lệch.\nNhưng... có ai đang nhìn mình không?",
+    [MaskType.NONE]: "Mình chỉ đang chơi thôi.\nKhông cần nghĩ nhiều.",
+  },
+};
+
 // --- HELPER FUNCTIONS ---
 
 const resolveCollision = (p: any, obs: Entity) => {
@@ -837,6 +853,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
+  const lastPlayerPosSent = useRef({ t: 0, x: 0, y: 0 });
 
   // Ensure canvas renders sharply on Hi-DPI displays (retina)
   useEffect(() => {
@@ -943,6 +960,58 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // campaign timing (used for PREGENERATED campaign runs)
     campaignStartTime: 0,
   });
+
+  // Preload map 1 background image (served from public/)
+  const map1Image = useRef<HTMLImageElement | null>(null);
+  const map1Image2 = useRef<HTMLImageElement | null>(null);
+  const trapMap1Image = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    try {
+      const img = new Image();
+      img.src = "public/assets/maps/map_1/background_1.png";
+      img.onload = () => {
+        map1Image.current = img;
+      };
+      img.onerror = () => {
+        // ignore load errors; fallback to gradient
+      };
+    } catch (err) {
+      // ignore
+    }
+    // also preload secondary background
+    try {
+      const img2 = new Image();
+      img2.src = "public/assets/maps/map_1/background_2.png";
+      img2.onload = () => {
+        map1Image2.current = img2;
+      };
+      img2.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+
+    // preload trap image used for map 1 walls
+    try {
+      const t = new Image();
+      t.src = "public/assets/maps/map_1/traps/trap_map1.png";
+      t.onload = () => {
+        trapMap1Image.current = t;
+      };
+      t.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+
+    return () => {
+      map1Image.current = null;
+      map1Image2.current = null;
+      trapMap1Image.current = null;
+    };
+  }, []);
 
   // --- timing & persistence helpers ---
   const formatMs = (ms: number) => {
@@ -1063,9 +1132,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         "S.E.R.A: Bộ nhớ đầy.",
       ],
       long_fall: ["S.E.R.A: Chuẩn bị va chạm.", "S.E.R.A: Mất điểm tựa."],
-    };
+    } as Record<string, string[]>;
 
-    const msgs = messages[type];
+    const msgs = (messages as any)[type];
     if (msgs && msgs.length > 0) {
       setAiMessage(msgs[Math.floor(Math.random() * msgs.length)]);
       aiState.current.lastMessageTime = now;
@@ -1193,11 +1262,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
+          // size the wall; allow level-0 to use a shorter height so it sits lower
+          let wallWidth = 60;
+          let wallHeight = 200;
+          if (levelIdx === 0) {
+            // make the trap visually lower — approx 3x player width, ~0.9x player height
+            wallWidth = Math.round(player.current.width * 2);
+            wallHeight = Math.round(player.current.height * 2);
+          }
+
           const wallEnt: any = {
             x: xPos,
-            y: CANVAS_HEIGHT - GROUND_HEIGHT - 200,
-            width: 60,
-            height: 200,
+            y: CANVAS_HEIGHT - GROUND_HEIGHT - wallHeight,
+            width: wallWidth,
+            height: wallHeight,
             type: "wall",
             text: wallLabel, // keep for a11y / debug
             icon: iconsArr && iconsArr.length === 1 ? iconsArr[0] : wallIcon,
@@ -1864,6 +1942,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
           const col = resolveCollision(p, obs);
           if (col) {
+            // Show map-specific wall-dialogs when colliding with traps on level 0
+            if (isWall && levelState.current.index === 0) {
+              const dlg = LEVEL_DIALOGS[levelState.current.index] || {};
+              const msg = dlg[p.mask as MaskType];
+              if (msg) setAiMessage(msg);
+            }
             if (col === "top") {
               p.y = obs.y + obs.height;
               p.vy = 0;
@@ -2013,11 +2097,51 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     ctx.imageSmoothingEnabled = true;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, config.bgGradient[0]);
-    gradient.addColorStop(1, config.bgGradient[1]);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw level background: use images for map 1 if available, otherwise gradient
+    if (l.index === 0 && map1Image.current && map1Image.current.complete) {
+      try {
+        // base/background layer
+        ctx.drawImage(map1Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // optional parallax overlay layer when second image is available
+        if (map1Image2.current && map1Image2.current.complete) {
+          const parallaxFactor = 0.32; // how much the overlay lags camera
+          const scroll = (l.cameraX * parallaxFactor) % CANVAS_WIDTH;
+          // draw two copies to tile horizontally and create seamless scroll
+          ctx.save();
+          ctx.globalAlpha = 0.95;
+          ctx.drawImage(
+            map1Image2.current,
+            -scroll,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+          );
+          ctx.drawImage(
+            map1Image2.current,
+            -scroll + CANVAS_WIDTH,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+          );
+          ctx.restore();
+        }
+      } catch (err) {
+        // If draw fails, fallback to gradient below
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else {
+      const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+      gradient.addColorStop(0, config.bgGradient[0]);
+      gradient.addColorStop(1, config.bgGradient[1]);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
 
     const lowHealth = p.health < 40;
     let glitchOffsetX = 0;
@@ -2030,23 +2154,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const shakeY = (Math.random() - 0.5) * l.shake;
 
     // Background
-    ctx.save();
-    ctx.translate(shakeX + glitchOffsetX, shakeY);
-    const totalW = CANVAS_WIDTH + 200;
-    l.bgElements.forEach((bg) => {
-      let drawX = (bg.x - l.cameraX * bg.speed) % totalW;
-      if (drawX < 0) drawX += totalW;
-      drawX -= 100;
-      ctx.fillStyle = bg.color;
-      if (bg.shape === "circle") {
-        ctx.beginPath();
-        ctx.arc(drawX, bg.y, bg.size, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillRect(drawX, bg.y, bg.size, bg.size);
-      }
-    });
-    ctx.restore();
+    // For level 0 we rely on the photographic backgrounds — skip extra
+    // decorative overlay elements which can wash out the images.
+    if (l.index !== 0) {
+      ctx.save();
+      ctx.translate(shakeX + glitchOffsetX, shakeY);
+      const totalW = CANVAS_WIDTH + 200;
+      l.bgElements.forEach((bg) => {
+        let drawX = (bg.x - l.cameraX * bg.speed) % totalW;
+        if (drawX < 0) drawX += totalW;
+        drawX -= 100;
+        ctx.fillStyle = bg.color;
+        if (bg.shape === "circle") {
+          ctx.beginPath();
+          ctx.arc(drawX, bg.y, bg.size, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(drawX, bg.y, bg.size, bg.size);
+        }
+      });
+      ctx.restore();
+    }
 
     // Game World
     ctx.translate(-l.cameraX + shakeX + glitchOffsetX, shakeY);
@@ -2156,27 +2284,63 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       } else if (obs.type === "wall") {
         const canPass = p.mask === obs.reqMask;
-        ctx.fillStyle = canPass
-          ? "rgba(255, 255, 255, 0.2)"
-          : "rgba(44, 62, 80, 0.9)";
-        if (!canPass) {
+
+        // draw trap image when available
+        if (trapMap1Image.current && trapMap1Image.current.complete) {
+          try {
+            ctx.drawImage(
+              trapMap1Image.current,
+              obs.x,
+              obs.y,
+              obs.width,
+              obs.height,
+            );
+          } catch (err) {
+            // fallback to rect if draw fails
+            ctx.fillStyle = canPass ? "#2ecc71" : "#c0392b";
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+          }
+
+          // tint overlay: green when passable, red when blocked
+          ctx.save();
+          ctx.globalCompositeOperation = "source-atop";
+          ctx.fillStyle = canPass
+            ? "rgba(46,204,113,0.18)"
+            : "rgba(231,76,60,0.18)";
           ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-          ctx.strokeStyle = "#c0392b";
-          ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
-        } else {
-          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-          ctx.strokeStyle = "#2ecc71";
-          ctx.setLineDash([5, 5]);
+          ctx.restore();
+
+          // border
+          ctx.strokeStyle = canPass ? "#2ecc71" : "#c0392b";
+          ctx.lineWidth = 1.5;
+          if (canPass) ctx.setLineDash([5, 5]);
           ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
           ctx.setLineDash([]);
+
+          // draw the label text on the wall
+          ctx.save();
+          ctx.fillStyle = "rgba(255,255,255,0.92)";
+          ctx.font = "bold 10px Roboto, Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText("TƯỜNG TÒ MÒ", obs.x + obs.width / 2, obs.y + 8);
+          ctx.restore();
+        } else {
+          // fallback visual if image not loaded: colored rect with border
+          ctx.fillStyle = canPass
+            ? "rgba(46,204,113,0.12)"
+            : "rgba(231,76,60,0.12)";
+          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+          ctx.strokeStyle = canPass ? "#2ecc71" : "#c0392b";
+          ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+          ctx.save();
+          ctx.fillStyle = canPass ? "#2ecc71" : "#c0392b";
+          ctx.font = "bold 12px Roboto, Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText("TƯỜNG TÒ MÒ", obs.x + obs.width / 2, obs.y + 8);
+          ctx.restore();
         }
-
-        // draw a semantic pictogram instead of large text
-        drawWallIcon(ctx, obs, canPass);
-
-        // keep textual label only for debugging (disabled in normal play)
-        // if you need an on-screen label for accessibility/testing, enable below
-        // ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2 + 34); ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.font = "10px Roboto"; ctx.textAlign = "center"; ctx.fillText(obs.text || "", 0, 0); ctx.restore();
       }
     });
 
@@ -2451,6 +2615,38 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) draw(ctx);
+      // Dispatch player head position (DOM/client coordinates) throttled ~100ms
+      try {
+        const now = Date.now();
+        if (now - lastPlayerPosSent.current.t > 90) {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = rect.width / CANVAS_WIDTH;
+          const scaleY = rect.height / CANVAS_HEIGHT;
+          const cover = Math.max(scaleX, scaleY);
+          const offsetX = (rect.width - CANVAS_WIDTH * cover) / 2;
+          const offsetY = (rect.height - CANVAS_HEIGHT * cover) / 2;
+          const p = player.current;
+          const l = levelState.current;
+          // logical head position: draw translates to (p.x + p.width/2, p.y + p.height)
+          // head is at that origin minus ~42 (as in drawFace)
+          const headLogicalX = p.x + p.width / 2;
+          const headLogicalY = p.y + p.height - 42;
+          const clientX = rect.left + offsetX + headLogicalX * cover;
+          const clientY = rect.top + offsetY + headLogicalY * cover;
+          const dx = Math.abs(clientX - lastPlayerPosSent.current.x);
+          const dy = Math.abs(clientY - lastPlayerPosSent.current.y);
+          if (dx > 2 || dy > 2 || now - lastPlayerPosSent.current.t > 300) {
+            window.dispatchEvent(
+              new CustomEvent("player-head-pos", {
+                detail: { x: clientX, y: clientY },
+              }),
+            );
+            lastPlayerPosSent.current = { t: now, x: clientX, y: clientY };
+          }
+        }
+      } catch (err) {
+        // ignore DOM errors in non-browser contexts
+      }
     }
     requestRef.current = requestAnimationFrame(tick);
   };
@@ -2465,7 +2661,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className='block w-full h-full'
+      className="block w-full h-full"
     />
   );
 };
