@@ -1657,7 +1657,7 @@ const UIOverlay: React.FC<UIProps> = ({
       <div className='absolute top-4 left-4 flex flex-col gap-3 z-30 pointer-events-none w-72'>
         <div className='neumorph-card px-3 py-3 w-full'>
           <div className='flex items-baseline justify-between gap-3 mb-2'>
-            <div className='text-[10px] font-mono text-gray-400'>VITALS</div>
+            <div className='text-[10px] font-mono text-gray-400'>Chỉ số sinh tồn</div>
             <div className='text-sm font-mono font-semibold' aria-hidden>
               <span
                 className={
@@ -1678,7 +1678,7 @@ const UIOverlay: React.FC<UIProps> = ({
         <div className='neumorph-card px-3 py-3 w-full'>
           <div className='flex items-baseline justify-between gap-3 mb-2'>
             <div className='text-[10px] font-mono text-gray-400'>
-              IDENTITY INTEGRITY
+              BẢN NGÃ
             </div>
             <div className='text-sm font-mono font-semibold text-cyan-300'>
               {Math.round(integrity)}%
@@ -1700,7 +1700,7 @@ const UIOverlay: React.FC<UIProps> = ({
               <span className='text-sm'>✨</span>
             </div> */}
             <div className='text-sm font-mono text-yellow-500'>
-              DATA FRAGMENTS
+              Vật phẩm thu thập
             </div>
           </div>
           <div className='text-sm font-bold text-gray-400'>
@@ -1712,7 +1712,7 @@ const UIOverlay: React.FC<UIProps> = ({
           className='neumorph-card px-3 py-2 w-full flex items-center justify-between gap-3'
           aria-hidden
         >
-          <div className='text-[10px] font-mono text-gray-400'>LEVEL TIME</div>
+          <div className='text-[10px] font-mono text-gray-400'>Thời gian màn chơi</div>
           <div className='text-sm font-mono font-semibold text-amber-300'>
             {currentLevelTime ? formatTime(currentLevelTime) : "00:00.00"}
           </div>
@@ -1721,10 +1721,10 @@ const UIOverlay: React.FC<UIProps> = ({
         {endlessActive && (
           <div className='neumorph-card px-3 py-2 w-full flex items-center justify-between gap-3'>
             <div className='text-[10px] font-mono text-gray-400'>
-              ENDLESS RUN
+              Thu thập mảnh ký ức
             </div>
             <div className='text-sm font-mono font-semibold text-amber-300'>
-              {endlessRunCount} màn
+              {endlessRunCount} ký ức
             </div>
           </div>
         )}

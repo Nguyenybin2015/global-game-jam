@@ -94,6 +94,20 @@ const LEVELS: LevelConfig[] = [
   },
 ];
 
+// Display titles for maps 1..10 (index 0..9)
+const MAP_TITLES: string[] = [
+  "Map 1 – Tuổi thơ",
+  "Map 2 – Không ai chờ",
+  "Map 3 – Trường học",
+  "Map 4 – So sánh bạn bè",
+  "Map 5 – Mơ ước",
+  "Map 6 – Phỏng vấn",
+  "Map 7 – Deadline & Công việc",
+  "Map 8 – Kiệt sức",
+  "Map 9 – Đối diện bản thân",
+  "Map 10 – Trở về Nhà",
+];
+
 const PREGENERATED_LEVEL_COUNT = 10; // total campaign levels (includes handcrafted LEVELS)
 
 // Dialogs per level keyed by mask — kept separate so each map can provide
@@ -1485,23 +1499,60 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         const xPos = i * 400 + Math.random() * 100;
         if (i % 2 === 0) {
           // semantic wall glyphs (kept `text` for accessibility/debug)
-          let wallLabel = "WALL";
+          // per-map semantic wall labels + optional override for which mask
+          // allows passing / breaking the wall. Defaults to the level's
+          // `config.reqMask` unless overridden below.
+          let wallLabel = "TƯỜNG";
           let wallIcon = "block";
-          if (levelIdx === 0) {
-            wallLabel = "NGOAN"; // childhood -> toy
-            wallIcon = "toy";
-          }
-          if (levelIdx === 1) {
-            wallLabel = "ĐIỂM SỐ"; // school -> book
-            wallIcon = "book";
-          }
-          if (levelIdx === 2) {
-            wallLabel = "TIỀN"; // career -> briefcase/money
-            wallIcon = "briefcase";
-          }
-          if (levelIdx === 3) {
-            wallLabel = "DƯ LUẬN"; // social -> mask/face
-            wallIcon = "mask";
+          let wallReqMask = config.reqMask;
+
+          switch (levelIdx) {
+            case 0:
+              wallLabel = "Tò Mò";
+              wallIcon = "toy";
+              break;
+            case 1:
+              wallLabel = "Bị Bỏ Lại";
+              wallIcon = "book";
+              break;
+            case 2:
+              wallLabel = "Khuôn Mẫu";
+              wallIcon = "briefcase";
+              break;
+            case 3:
+              wallLabel = `Bất Công\nLàm từ thành tích người khác\nChỉ vỡ khi 😡 Giận dữ`;
+              wallIcon = "mask";
+              // override: only BREAKS / can be passed when in WORKER persona
+              wallReqMask = MaskType.WORKER;
+              break;
+            case 4:
+              wallLabel = "Dám Chọn";
+              wallIcon = "block";
+              break;
+            case 5:
+              wallLabel = "Vừa Lòng";
+              wallIcon = "block";
+              break;
+            case 6:
+              wallLabel = "Kiệt Sức";
+              wallIcon = "briefcase";
+              break;
+            case 7:
+              wallLabel = "Trống Rỗng";
+              wallIcon = "mask";
+              break;
+            case 8:
+              wallLabel = "Danh Tính";
+              wallIcon = "mask";
+              break;
+            case 9:
+              wallLabel = "Chân Thật";
+              wallIcon = "mask";
+              // final wall should be passable when true self (NONE)
+              wallReqMask = MaskType.NONE;
+              break;
+            default:
+              break;
           }
 
           // occasionally compose a stacked/grouped wall (2-4 icons) for visual variety
@@ -1530,8 +1581,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           let wallHeight = 200;
           if (levelIdx === 0) {
             // make the trap visually lower — approx 3x player width, ~0.9x player height
-            wallWidth = Math.round(player.current.width * 2);
-            wallHeight = Math.round(player.current.height * 2);
+            wallWidth = Math.round(player.current.width * 1.5);
+            wallHeight = Math.round(player.current.height * 3);
           }
 
           const wallEnt: any = {
@@ -1542,7 +1593,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             type: "wall",
             text: wallLabel, // keep for a11y / debug
             icon: iconsArr && iconsArr.length === 1 ? iconsArr[0] : wallIcon,
-            reqMask: config.reqMask,
+            reqMask: wallReqMask,
           };
           if (iconsArr && iconsArr.length > 0) wallEnt.icons = iconsArr;
           obstacles.push(wallEnt as Entity);
@@ -2152,16 +2203,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                 detail: { levelsCompleted: l.endlessLevelsCompleted },
               }),
             );
-            // advance to next procedural level
+            // advance to next procedural level (endless mode still allows infinite)
             generateLevel(l.index + 1);
             return;
           }
 
-          // Progression: allow next level if it's within handcrafted LEVELS
-          // or within a pre-generated campaign.
-          const hasNextInPreGen = !!(
-            l.preGenerated && l.index < l.preGenerated.length - 1
-          );
+          // Determine how many maps the game should allow (cap at PREGENERATED_LEVEL_COUNT)
+          const maxAllowedIndex = l.preGenerated
+            ? Math.max(0, l.preGenerated.length - 1)
+            : PREGENERATED_LEVEL_COUNT - 1;
 
           // If this was the last level of a pre-generated campaign, record the
           // full-run time to the campaign leaderboard before showing victory.
@@ -2186,9 +2236,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             return;
           }
 
-          if (l.index < LEVELS.length - 1 || hasNextInPreGen)
+          // If there are more maps allowed (handcrafted, pre-generated, or up to the
+          // fixed PREGENERATED_LEVEL_COUNT), advance; otherwise show victory.
+          if (l.index < maxAllowedIndex) {
             generateLevel(l.index + 1);
-          else setGameState(GameState.VICTORY);
+          } else {
+            setGameState(GameState.VICTORY);
+          }
           return;
         } else if (obs.type === "spike") {
           takeHealthDamage(5);
@@ -2527,6 +2581,39 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       glitchOffsetX = (Math.random() - 0.5) * 20 * ((40 - p.health) / 10);
     }
 
+    // Map number (large subtle glyph at top) and title (centered)
+    try {
+      const idx = levelState.current.index || 0;
+      const title = MAP_TITLES[idx] || (l.config && l.config.name) || "";
+
+      // large faint map number at top-center (background accent)
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `700 88px Roboto, Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const numX = CANVAS_WIDTH / 2 + glitchOffsetX * 0.2;
+      ctx.fillText(String(idx + 1), numX, 8);
+      ctx.restore();
+
+      // Title band (centered slightly below the top)
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.font = `600 22px Roboto, Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      // small shadow for legibility
+      ctx.shadowColor = "rgba(0,0,0,0.45)";
+      ctx.shadowBlur = 6;
+      ctx.fillText(title, CANVAS_WIDTH / 2 + glitchOffsetX * 0.25, 18);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    } catch (err) {
+      // ignore any canvas text errors
+    }
+
     ctx.save();
     const shakeX = (Math.random() - 0.5) * l.shake;
     const shakeY = (Math.random() - 0.5) * l.shake;
@@ -2745,13 +2832,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
           ctx.setLineDash([]);
 
-          // draw the label text on the wall
+          // draw the label text on the wall (support multiline obs.text)
           ctx.save();
           ctx.fillStyle = "rgba(255,255,255,0.92)";
           ctx.font = "bold 10px Roboto, Arial, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillText("TƯỜNG TÒ MÒ", obs.x + obs.width / 2, obs.y + 8);
+          const rawLabel = (obs.text as string) || "";
+          const lines = rawLabel.split("\n");
+          for (let li = 0; li < lines.length; li++) {
+            ctx.fillText(lines[li], obs.x + obs.width / 2, obs.y + 8 + li * 12);
+          }
           ctx.restore();
         } else {
           // fallback visual if image not loaded: colored rect with border
@@ -2766,7 +2857,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.font = "bold 12px Roboto, Arial, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillText("TƯỜNG TÒ MÒ", obs.x + obs.width / 2, obs.y + 8);
+          const fallbackLabel = (obs.text as string) || "";
+          const flines = fallbackLabel.split("\n");
+          for (let li = 0; li < flines.length; li++) {
+            ctx.fillText(
+              flines[li],
+              obs.x + obs.width / 2,
+              obs.y + 8 + li * 14,
+            );
+          }
           ctx.restore();
         }
       }
