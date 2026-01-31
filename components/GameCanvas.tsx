@@ -10,6 +10,13 @@ import {
   CANVAS_HEIGHT,
   GROUND_HEIGHT,
   TOTAL_MEMORIES,
+  LevelTimeEntry,
+  TIMES_STORAGE_KEY,
+  CampaignRunEntry,
+  CAMPAIGN_TIMES_KEY,
+  // endless-run types
+  EndlessRunEntry,
+  ENDLESS_RUNS_KEY,
 } from "../types";
 
 // Default Physics Constants
@@ -27,6 +34,7 @@ interface GameCanvasProps {
   setDeathReason: (reason: string) => void;
   setCollectedMemories: (count: number) => void;
   setAiMessage: (msg: string) => void;
+  setCurrentLevelTime: (ms: number) => void;
 }
 
 const LEVELS: LevelConfig[] = [
@@ -642,6 +650,179 @@ const drawFace = (
   ctx.restore();
 };
 
+// Draw a small semantic pictogram for a wall (child/book/briefcase/mask/home).
+// Uses simple canvas primitives (keeps bundle small) and tints based on passability.
+const drawWallIcon = (
+  ctx: CanvasRenderingContext2D,
+  obs: Entity,
+  canPass: boolean,
+) => {
+  const cx = obs.x + obs.width / 2;
+  const cy = obs.y + obs.height / 2;
+  const size = Math.min(36, Math.max(20, obs.width * 0.6));
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-Math.PI / 2);
+
+  // background badge
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.7, 0, Math.PI * 2);
+  ctx.fillStyle = canPass ? "rgba(46,204,113,0.06)" : "rgba(231,76,60,0.06)";
+  ctx.fill();
+
+  const strokeCol = canPass ? "#2ecc71" : "#e74c3c";
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = strokeCol;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // support single `icon` or multiple `icons` (preferred: `icons[]`)
+  const iconsArr: string[] = Array.isArray((obs as any).icons)
+    ? (obs as any).icons
+    : obs.icon
+      ? [obs.icon]
+      : ["block"];
+
+  const drawSingleIcon = (
+    cx: number,
+    cy: number,
+    cellSize: number,
+    ico: string,
+  ) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    // tiny random-ish rotation for stacked feel
+    ctx.rotate(((Math.sin(cx + cy) * 0.5) / 180) * Math.PI * 12);
+    const s = Math.max(8, cellSize * 0.78);
+
+    if (ico === "toy") {
+      ctx.fillStyle = "#f1c40f";
+      ctx.beginPath();
+      ctx.ellipse(-2, -2, s * 0.28, s * 0.34, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.06)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-2, s * 0.18);
+      ctx.lineTo(-2, s * 0.46);
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      const r = s * 0.12;
+      for (let i = 0; i < 5; i++) {
+        const a = (i * Math.PI * 2) / 5 - Math.PI / 2;
+        const x = Math.cos(a) * r + s * 0.34;
+        const y = Math.sin(a) * r - s * 0.06;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (ico === "book") {
+      const w = s * 0.7;
+      const h = s * 0.42;
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w / 2 - 2, h, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(2, -h / 2, w / 2 - 2, h, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -h / 2 + 6);
+      ctx.lineTo(0, h / 2 - 6);
+      ctx.strokeStyle = "rgba(0,0,0,0.06)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else if (ico === "briefcase") {
+      const bw = s * 0.7;
+      const bh = s * 0.42;
+      ctx.fillStyle = "#c0392b";
+      ctx.beginPath();
+      ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 6);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.moveTo(-bw * 0.18, -bh / 2);
+      ctx.quadraticCurveTo(0, -bh, bw * 0.18, -bh / 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(-6, -6, 12, 6);
+    } else if (ico === "mask") {
+      ctx.fillStyle = "#95a5a6";
+      ctx.beginPath();
+      ctx.ellipse(0, -2, s * 0.36, s * 0.24, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111";
+      ctx.beginPath();
+      ctx.ellipse(-s * 0.22, -2, s * 0.07, s * 0.06, 0, 0, Math.PI * 2);
+      ctx.ellipse(s * 0.22, -2, s * 0.07, s * 0.06, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.25, 6);
+      ctx.quadraticCurveTo(0, s * 0.12, s * 0.25, 6);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#ecf0f1";
+      ctx.beginPath();
+      ctx.roundRect(-s * 0.28, -s * 0.18, s * 0.56, s * 0.4, 6);
+      ctx.fill();
+      ctx.fillStyle = "#f39c12";
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.32, -s * 0.18);
+      ctx.lineTo(0, -s * 0.4);
+      ctx.lineTo(s * 0.32, -s * 0.18);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // subtle drop shadow per token for depth
+    ctx.restore();
+  };
+
+  // layout icons in a compact grid that fits inside `size`
+  const n = Math.min(9, iconsArr.length);
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  const padding = Math.max(4, size * 0.06);
+  const cellW = (size - padding * (cols + 1)) / cols;
+  const cellH = (size - padding * (rows + 1)) / rows;
+  const cellSize = Math.min(cellW, cellH);
+  const startX = -((cols * cellSize + padding * (cols - 1)) / 2);
+  const startY = -((rows * cellSize + padding * (rows - 1)) / 2);
+
+  for (let i = 0; i < n; i++) {
+    const cx = startX + (i % cols) * (cellSize + padding);
+    const cy = startY + Math.floor(i / cols) * (cellSize + padding);
+    // slight overlap / elevation for stacked look
+    const overlapOffset = Math.max(0, Math.min(6, (rows - 1) * 2));
+    drawSingleIcon(
+      cx,
+      cy - Math.floor(i / cols) * overlapOffset,
+      cellSize,
+      iconsArr[i],
+    );
+  }
+
+  ctx.restore();
+};
+
 const GameCanvas: React.FC<GameCanvasProps> = ({
   gameState,
   setGameState,
@@ -652,6 +833,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   setDeathReason,
   setCollectedMemories,
   setAiMessage,
+  setCurrentLevelTime,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
@@ -747,11 +929,90 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // precomputed maps (PREGENERATED_LEVEL_COUNT). Stored in `preGenerated`.
     preGeneratedMode: false,
     preGenerated: null as LevelConfig[] | null,
+    // endless-run mode: procedural, never ends until player dies
+    endlessMode: false,
+    endlessLevelsCompleted: 0,
+    endlessRunStart: 0,
     // deterministic-ish seed derived from level index (kept for reproducibility)
     procSeed: 0,
     // the active LevelConfig for the current level (handcrafted or pre-generated)
     config: LEVELS[0] as LevelConfig,
+    // timing helpers
+    levelStartTime: 0,
+    _lastTimerUpdate: 0,
+    // campaign timing (used for PREGENERATED campaign runs)
+    campaignStartTime: 0,
   });
+
+  // --- timing & persistence helpers ---
+  const formatMs = (ms: number) => {
+    const total = Math.max(0, Math.floor(ms));
+    const minutes = Math.floor(total / 60000);
+    const seconds = Math.floor((total % 60000) / 1000);
+    const centi = Math.floor((total % 1000) / 10);
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centi).padStart(2, "0")}`;
+  };
+
+  const saveLevelTime = (entry: LevelTimeEntry) => {
+    try {
+      const raw = localStorage.getItem(TIMES_STORAGE_KEY);
+      const arr: LevelTimeEntry[] = raw ? JSON.parse(raw) : [];
+      arr.push(entry);
+      // keep sorted ascending (fastest first) and cap to 100 entries
+      arr.sort((a, b) => a.timeMs - b.timeMs);
+      const trimmed = arr.slice(0, 100);
+      localStorage.setItem(TIMES_STORAGE_KEY, JSON.stringify(trimmed));
+      // notify UI overlay to refresh immediately
+      window.dispatchEvent(
+        new CustomEvent("level-time-saved", { detail: { entry } }),
+      );
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  // Save a full pre-generated campaign run (total time for all levels)
+  const saveCampaignRun = (entry: CampaignRunEntry) => {
+    try {
+      const raw = localStorage.getItem(CAMPAIGN_TIMES_KEY);
+      const arr: CampaignRunEntry[] = raw ? JSON.parse(raw) : [];
+      arr.push(entry);
+      arr.sort((a, b) => a.totalTimeMs - b.totalTimeMs);
+      const trimmed = arr.slice(0, 100);
+      localStorage.setItem(CAMPAIGN_TIMES_KEY, JSON.stringify(trimmed));
+      window.dispatchEvent(
+        new CustomEvent("campaign-time-saved", { detail: { entry } }),
+      );
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  // Save an endless-run summary (number of levels cleared + total time)
+  const saveEndlessRun = (entry: EndlessRunEntry) => {
+    try {
+      const raw = localStorage.getItem(ENDLESS_RUNS_KEY);
+      const arr: EndlessRunEntry[] = raw ? JSON.parse(raw) : [];
+      arr.push(entry);
+      // sort by most levels cleared desc, then by time asc
+      arr.sort((a, b) => {
+        if (b.levelsCompleted !== a.levelsCompleted)
+          return b.levelsCompleted - a.levelsCompleted;
+        return a.totalTimeMs - b.totalTimeMs;
+      });
+      const trimmed = arr.slice(0, 100);
+      localStorage.setItem(ENDLESS_RUNS_KEY, JSON.stringify(trimmed));
+      window.dispatchEvent(
+        new CustomEvent("endless-run-saved", { detail: { entry } }),
+      );
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
   const keys = useRef({ right: false, left: false, up: false });
 
   const triggerAI = (
@@ -857,6 +1118,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       levelState.current.config = levelState.current.preGenerated[levelIdx];
     } else if (levelIdx < LEVELS.length) {
       levelState.current.config = LEVELS[levelIdx];
+    } else if (levelState.current.endlessMode) {
+      // endless mode: generate procedural levels on-the-fly
+      levelState.current.config = generateProceduralConfig(levelIdx);
     } else {
       // index beyond available content -> victory (no infinite generation)
       setGameState(GameState.VICTORY);
@@ -878,25 +1142,69 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     setAiMessage(config.message);
     aiState.current.lastMessageTime = Date.now() + 2000;
 
+    // reset/start per-level timer
+    levelState.current.levelStartTime = Date.now();
+    levelState.current._lastTimerUpdate = 0;
+    setCurrentLevelTime(0);
+
     if (config.obstacleType !== "none") {
       const numObstacles = Math.floor(config.length / 400);
       for (let i = 1; i <= numObstacles; i++) {
         const xPos = i * 400 + Math.random() * 100;
         if (i % 2 === 0) {
-          let wallText = "WALL";
-          if (levelIdx === 0) wallText = "NGOAN";
-          if (levelIdx === 1) wallText = "ĐIỂM SỐ";
-          if (levelIdx === 2) wallText = "TIỀN";
-          if (levelIdx === 3) wallText = "DƯ LUẬN";
-          obstacles.push({
+          // semantic wall glyphs (kept `text` for accessibility/debug)
+          let wallLabel = "WALL";
+          let wallIcon = "block";
+          if (levelIdx === 0) {
+            wallLabel = "NGOAN"; // childhood -> toy
+            wallIcon = "toy";
+          }
+          if (levelIdx === 1) {
+            wallLabel = "ĐIỂM SỐ"; // school -> book
+            wallIcon = "book";
+          }
+          if (levelIdx === 2) {
+            wallLabel = "TIỀN"; // career -> briefcase/money
+            wallIcon = "briefcase";
+          }
+          if (levelIdx === 3) {
+            wallLabel = "DƯ LUẬN"; // social -> mask/face
+            wallIcon = "mask";
+          }
+
+          // occasionally compose a stacked/grouped wall (2-4 icons) for visual variety
+          const makeComposite = Math.random() > 0.72; // ~28% chance
+          let iconsArr: string[] | undefined = undefined;
+          if (makeComposite) {
+            // choose 2..4 icons, prefer thematically relevant + variants
+            const pool = [
+              wallIcon,
+              "block",
+              "toy",
+              "book",
+              "briefcase",
+              "mask",
+            ];
+            const count = 2 + Math.floor(Math.random() * 3);
+            iconsArr = [];
+            for (let k = 0; k < count; k++) {
+              const pick = pool[Math.floor(Math.random() * pool.length)];
+              iconsArr.push(pick);
+            }
+          }
+
+          const wallEnt: any = {
             x: xPos,
             y: CANVAS_HEIGHT - GROUND_HEIGHT - 200,
             width: 60,
             height: 200,
             type: "wall",
-            text: wallText,
+            text: wallLabel, // keep for a11y / debug
+            icon: iconsArr && iconsArr.length === 1 ? iconsArr[0] : wallIcon,
             reqMask: config.reqMask,
-          });
+          };
+          if (iconsArr && iconsArr.length > 0) wallEnt.icons = iconsArr;
+          obstacles.push(wallEnt as Entity);
         } else {
           const isSpike = Math.random() > 0.6;
           obstacles.push({
@@ -969,6 +1277,50 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     levelState.current.bgElements = bgElements;
     levelState.current.index = levelIdx;
     setCurrentLevel(levelIdx);
+  };
+
+  // --- Save / Load (localStorage) for pre-generated campaign ---
+  const SAVE_KEY = "htvn_campaign_save";
+
+  const saveCampaignToStorage = (meta?: Record<string, any>) => {
+    try {
+      const payload = {
+        preGenerated: levelState.current.preGenerated || null,
+        preGeneratedMode: !!levelState.current.preGenerated,
+        index: levelState.current.index,
+        player: {
+          health: Math.max(0, Math.floor(player.current.health)),
+          integrity: Math.max(0, Math.floor(player.current.integrity)),
+          memoriesCollected: player.current.memoriesCollected,
+          mask: player.current.mask,
+        },
+        meta: meta || {},
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  const loadCampaignFromStorage = () => {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as any;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const clearCampaignSave = () => {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      return true;
+    } catch (err) {
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -1079,10 +1431,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         levelState.current.preGenerated = arr;
         levelState.current.procSeed = Date.now() % 100000;
+        // start campaign timer when pre-generated campaign is enabled
+        levelState.current.campaignStartTime = Date.now();
       } else {
         levelState.current.preGenerated = null;
         levelState.current.procSeed = 0;
         levelState.current.preGeneratedMode = false;
+        levelState.current.campaignStartTime = 0;
       }
       // regenerate current level so UI reflects the change immediately
       generateLevel(levelState.current.index);
@@ -1097,15 +1452,150 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
+    // save / load handlers for campaign persistence
+    const onSaveGame = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail || {};
+      // if no preGenerated campaign exists, generate one so we can save it
+      if (!levelState.current.preGenerated) {
+        const arr: LevelConfig[] = [];
+        for (let i = 0; i < PREGENERATED_LEVEL_COUNT; i++) {
+          arr.push(i < LEVELS.length ? LEVELS[i] : generateProceduralConfig(i));
+        }
+        levelState.current.preGenerated = arr;
+        levelState.current.preGeneratedMode = true;
+      }
+      saveCampaignToStorage(detail);
+      setAiMessage("S.E.R.A: Trạng thái chiến dịch đã được lưu.");
+    };
+
+    const onLoadSave = (ev: Event) => {
+      const saved = loadCampaignFromStorage();
+      if (!saved) return;
+      levelState.current.preGenerated = saved.preGenerated || null;
+      levelState.current.preGeneratedMode = !!saved.preGenerated;
+      // restore the saved index / then patch player state after level generation
+      const target = Math.max(
+        0,
+        Math.min((saved.index as number) || 0, PREGENERATED_LEVEL_COUNT - 1),
+      );
+      generateLevel(target);
+      // apply player snapshot
+      if (saved.player) {
+        player.current.health = saved.player.health ?? player.current.health;
+        player.current.integrity =
+          saved.player.integrity ?? player.current.integrity;
+        player.current.memoriesCollected =
+          saved.player.memoriesCollected ?? player.current.memoriesCollected;
+        player.current.mask = saved.player.mask ?? player.current.mask;
+        setCurrentHealth(player.current.health);
+        setCurrentIntegrity(player.current.integrity);
+        setCollectedMemories(player.current.memoriesCollected);
+        setCurrentMask(player.current.mask);
+      }
+      setGameState(GameState.PLAYING);
+      setAiMessage("S.E.R.A: Tiếp tục chiến dịch đã lưu.");
+    };
+
+    const onClearSave = (ev: Event) => {
+      clearCampaignSave();
+      setAiMessage("S.E.R.A: Dữ liệu lưu đã bị xóa.");
+    };
+
+    const onReplayCampaign = (ev: Event) => {
+      const saved = loadCampaignFromStorage();
+      if (!saved || !saved.preGenerated) return;
+      levelState.current.preGenerated = saved.preGenerated;
+      levelState.current.preGeneratedMode = true;
+      // reset campaign timer
+      levelState.current.campaignStartTime = Date.now();
+      generateLevel(0);
+      player.current.health = 100;
+      player.current.integrity = 100;
+      player.current.memoriesCollected = 0;
+      setCurrentHealth(100);
+      setCurrentIntegrity(100);
+      setCollectedMemories(0);
+      setGameState(GameState.PLAYING);
+      // keep the save but reset its index to 0
+      saveCampaignToStorage({ restarted: true });
+      setAiMessage("S.E.R.A: Bắt đầu lại chiến dịch.");
+    };
+
+    const onEndlessMode = (ev: Event) => {
+      const enabled = !!(ev as CustomEvent).detail;
+      levelState.current.endlessMode = enabled;
+      levelState.current.preGeneratedMode = false;
+      levelState.current.preGenerated = null;
+      levelState.current.endlessLevelsCompleted = 0;
+      levelState.current.endlessRunStart = enabled ? Date.now() : 0;
+      // notify HUD
+      window.dispatchEvent(
+        new CustomEvent("endless-mode-changed", {
+          detail: { enabled, levelsCompleted: 0 },
+        }),
+      );
+      if (enabled) {
+        // start at procedural level 0
+        generateLevel(0);
+      }
+    };
+
+    const onStartPreGenLevel = (ev: Event) => {
+      const d: any = (ev as CustomEvent).detail || {};
+      const target = Math.max(
+        0,
+        Math.min((d.index as number) || 0, PREGENERATED_LEVEL_COUNT - 1),
+      );
+      // ensure pre-generated campaign exists
+      if (!levelState.current.preGenerated) {
+        const arr: LevelConfig[] = [];
+        for (let i = 0; i < PREGENERATED_LEVEL_COUNT; i++) {
+          arr.push(i < LEVELS.length ? LEVELS[i] : generateProceduralConfig(i));
+        }
+        levelState.current.preGenerated = arr;
+        levelState.current.preGeneratedMode = true;
+        levelState.current.campaignStartTime = Date.now();
+      }
+      generateLevel(target);
+    };
+
     window.addEventListener("bg-preset", onPreset as EventListener);
     window.addEventListener("bg-effects", onEffects as EventListener);
     window.addEventListener("high-detail", onHighDetail as EventListener);
     window.addEventListener("proc-levels", onProcLevels as EventListener);
+    window.addEventListener("save-game", onSaveGame as EventListener);
+    window.addEventListener("load-save", onLoadSave as EventListener);
+    window.addEventListener("clear-save", onClearSave as EventListener);
+    window.addEventListener(
+      "replay-campaign",
+      onReplayCampaign as EventListener,
+    );
+    window.addEventListener("endless-mode", onEndlessMode as EventListener);
+    window.addEventListener(
+      "start-pregen-level",
+      onStartPreGenLevel as EventListener,
+    );
+
     return () => {
       window.removeEventListener("bg-preset", onPreset as EventListener);
       window.removeEventListener("bg-effects", onEffects as EventListener);
       window.removeEventListener("high-detail", onHighDetail as EventListener);
       window.removeEventListener("proc-levels", onProcLevels as EventListener);
+      window.removeEventListener("save-game", onSaveGame as EventListener);
+      window.removeEventListener("load-save", onLoadSave as EventListener);
+      window.removeEventListener("clear-save", onClearSave as EventListener);
+      window.removeEventListener(
+        "replay-campaign",
+        onReplayCampaign as EventListener,
+      );
+      window.removeEventListener(
+        "endless-mode",
+        onEndlessMode as EventListener,
+      );
+      window.removeEventListener(
+        "start-pregen-level",
+        onStartPreGenLevel as EventListener,
+      );
     };
   }, []);
 
@@ -1294,11 +1784,67 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // 2. Interaction
         if (obs.type === "goal") {
+          // record completion time
+          const elapsed = levelState.current.levelStartTime
+            ? Math.max(0, Date.now() - levelState.current.levelStartTime)
+            : 0;
+          setCurrentLevelTime(elapsed);
+
+          const lvlName = (l.config || LEVELS[l.index]).name;
+          const entry: LevelTimeEntry = {
+            levelId: l.index,
+            levelName: lvlName,
+            timeMs: elapsed,
+            timestamp: Date.now(),
+          };
+          saveLevelTime(entry);
+          setAiMessage(
+            `S.E.R.A: Màn \"${lvlName}\" hoàn thành — ${formatMs(elapsed)}`,
+          );
+
+          // --- Endless-run: continue generating procedural levels forever ---
+          if (l.endlessMode) {
+            l.endlessLevelsCompleted = (l.endlessLevelsCompleted || 0) + 1;
+            // notify HUD of progress
+            window.dispatchEvent(
+              new CustomEvent("endless-level-complete", {
+                detail: { levelsCompleted: l.endlessLevelsCompleted },
+              }),
+            );
+            // advance to next procedural level
+            generateLevel(l.index + 1);
+            return;
+          }
+
           // Progression: allow next level if it's within handcrafted LEVELS
-          // or within a pre-generated campaign. Do NOT generate infinitely.
+          // or within a pre-generated campaign.
           const hasNextInPreGen = !!(
             l.preGenerated && l.index < l.preGenerated.length - 1
           );
+
+          // If this was the last level of a pre-generated campaign, record the
+          // full-run time to the campaign leaderboard before showing victory.
+          if (
+            l.preGeneratedMode &&
+            l.preGenerated &&
+            l.index === l.preGenerated.length - 1
+          ) {
+            const started = l.campaignStartTime || 0;
+            if (started > 0) {
+              const total = Math.max(0, Date.now() - started);
+              const runEntry: CampaignRunEntry = {
+                runId: String(Date.now()),
+                totalTimeMs: total,
+                levels: l.preGenerated.length,
+                timestamp: Date.now(),
+              };
+              saveCampaignRun(runEntry);
+              setAiMessage(`S.E.R.A: Chiến dịch hoàn tất — ${formatMs(total)}`);
+            }
+            setGameState(GameState.VICTORY);
+            return;
+          }
+
           if (l.index < LEVELS.length - 1 || hasNextInPreGen)
             generateLevel(l.index + 1);
           else setGameState(GameState.VICTORY);
@@ -1349,6 +1895,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       targetCamX = config.length - CANVAS_WIDTH + 100;
     l.cameraX += (targetCamX - l.cameraX) * 0.1;
 
+    // --- live level timer (throttled to avoid excessive React updates) ---
+    if (
+      typeof levelState.current.levelStartTime === "number" &&
+      levelState.current.levelStartTime > 0
+    ) {
+      const now = Date.now();
+      const elapsed = Math.max(0, now - levelState.current.levelStartTime);
+      if (now - (l._lastTimerUpdate || 0) > 150) {
+        l._lastTimerUpdate = now;
+        setCurrentLevelTime(Math.floor(elapsed));
+      }
+    }
+
+    // Stat Degradation
+    if (p.invulnerable > 0) p.invulnerable--;
+
     // Stat Degradation
     if (p.invulnerable > 0) p.invulnerable--;
     if (p.hurtTimer > 0) p.hurtTimer--;
@@ -1368,10 +1930,49 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     }
     if (p.health <= 0) {
       setDeathReason("S.E.R.A: Đối tượng đã ngưng hoạt động.");
+      // if this was an endless run, persist the result (levels cleared)
+      if (levelState.current.endlessMode) {
+        const levels = levelState.current.endlessLevelsCompleted || 0;
+        const total = Math.max(
+          0,
+          Date.now() - (levelState.current.endlessRunStart || Date.now()),
+        );
+        const entry: EndlessRunEntry = {
+          runId: String(Date.now()),
+          levelsCompleted: levels,
+          totalTimeMs: total,
+          timestamp: Date.now(),
+        };
+        saveEndlessRun(entry);
+        window.dispatchEvent(
+          new CustomEvent("endless-mode-changed", {
+            detail: { enabled: false, levelsCompleted: levels },
+          }),
+        );
+      }
       setGameState(GameState.GAME_OVER);
     }
     if (p.integrity <= 0) {
       setDeathReason("S.E.R.A: Đồng hóa hoàn tất.");
+      if (levelState.current.endlessMode) {
+        const levels = levelState.current.endlessLevelsCompleted || 0;
+        const total = Math.max(
+          0,
+          Date.now() - (levelState.current.endlessRunStart || Date.now()),
+        );
+        const entry: EndlessRunEntry = {
+          runId: String(Date.now()),
+          levelsCompleted: levels,
+          totalTimeMs: total,
+          timestamp: Date.now(),
+        };
+        saveEndlessRun(entry);
+        window.dispatchEvent(
+          new CustomEvent("endless-mode-changed", {
+            detail: { enabled: false, levelsCompleted: levels },
+          }),
+        );
+      }
       setGameState(GameState.GAME_OVER);
     }
 
@@ -1570,14 +2171,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.setLineDash([]);
         }
 
-        ctx.save();
-        ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillStyle = canPass ? "#fff" : "#e74c3c";
-        ctx.font = "bold 20px Roboto";
-        ctx.textAlign = "center";
-        ctx.fillText(obs.text || "WALL", 0, 0);
-        ctx.restore();
+        // draw a semantic pictogram instead of large text
+        drawWallIcon(ctx, obs, canPass);
+
+        // keep textual label only for debugging (disabled in normal play)
+        // if you need an on-screen label for accessibility/testing, enable below
+        // ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2 + 34); ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.font = "10px Roboto"; ctx.textAlign = "center"; ctx.fillText(obs.text || "", 0, 0); ctx.restore();
       }
     });
 
@@ -1806,7 +2405,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fill();
     }
 
-    // thin crisp rim/stroke to enhance silhouette on all displays\n    ctx.lineWidth = 1.8;\n    ctx.strokeStyle = "rgba(0,0,0,0.22)";\n    ctx.stroke();
+    // thin crisp rim/stroke to enhance silhouette on all displays
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = "rgba(0,0,0,0.22)";
+    ctx.stroke();
     if (p.mask !== MaskType.NONE) {
       ctx.strokeStyle = "rgba(189,195,199,0.5)";
       ctx.lineWidth = 1.2;
