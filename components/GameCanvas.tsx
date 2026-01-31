@@ -931,6 +931,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // smoothed pupil used by renderer for eased gaze (prevents jitter)
     pupilSmoothX: 0,
     pupilSmoothY: 0,
+    // whether the player has selected a mask at least once (tutorial trigger)
+    _hasPickedMask: false,
   });
 
   const aiState = useRef({ lastMessageTime: 0, lastAction: "none" });
@@ -965,6 +967,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     practiceExpect: "right",
     practiceStarted: 0,
     practiceTimeout: 0,
+
+    // per-run flags (reset at the start of a run) — ensure certain HUD bubbles show once
+    healthWarningShown: false,
   });
 
   // Preload map 1 background image (served from public/)
@@ -1619,7 +1624,31 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       levelState.current.practiceActive = true;
       levelState.current.practiceExpect = d.expect || "right";
       levelState.current.practiceStarted = Date.now();
-      levelState.current.practiceTimeout = d.timeoutMs || 2000;
+      // slightly longer default for jump/collect flows
+      levelState.current.practiceTimeout =
+        d.timeoutMs || (d.expect === "collect" ? 3500 : 2000);
+
+      // For `collect` practice, spawn a temporary memory within reach and mark it
+      if (levelState.current.practiceExpect === "collect") {
+        const p = player.current;
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const spawnX = Math.max(p.x + 100, p.x + p.width + 40);
+        const mem: any = {
+          x: spawnX,
+          y: groundY - 150,
+          width: 30,
+          height: 30,
+          type: "memory",
+          collected: false,
+          _practiceSpawn: true,
+        };
+        // remove any previous practice memory (defensive)
+        levelState.current.obstacles = levelState.current.obstacles.filter(
+          (o) => !(o as any)._practiceSpawn,
+        );
+        levelState.current.obstacles.push(mem as any);
+      }
+
       // ensure canvas is focused so keypresses register
       try {
         const c = canvasRef.current;
@@ -1790,6 +1819,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       levelState.current.preGenerated = null;
       levelState.current.endlessLevelsCompleted = 0;
       levelState.current.endlessRunStart = enabled ? Date.now() : 0;
+      // reset per-run flags so tutorial/warnings can show for the new run
+      levelState.current.healthWarningShown = false;
+      player.current._hasPickedMask = false;
       // notify HUD
       window.dispatchEvent(
         new CustomEvent("endless-mode-changed", {
@@ -1829,6 +1861,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       player.current.health = 100;
       player.current.integrity = 100;
       player.current.memoriesCollected = 0;
+      player.current._hasPickedMask = false;
+      // reset per-run flags
+      levelState.current.healthWarningShown = false;
+
       setCurrentHealth(100);
       setCurrentIntegrity(100);
       setCollectedMemories(0);
@@ -1914,17 +1950,39 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         color: color,
       });
     }
+
+    // show an explanatory ThoughtBubble the first time the player picks any mask
+    if (!player.current._hasPickedMask) {
+      player.current._hasPickedMask = true;
+      try {
+        window.dispatchEvent(
+          new CustomEvent("show-thought-bubble", {
+            detail: {
+              text: "Lưu ý: chạm vật cản hoặc đi qua tường khi không đeo mặt nạ phù hợp sẽ làm giảm Vitals (Health/Integrity).",
+              duration: 4200,
+            },
+          }),
+        );
+      } catch (err) {
+        /* ignore */
+      }
+    }
   };
 
   useEffect(() => {
     if (gameState === GameState.START) {
+      // reset player vitals/state for a fresh run
       player.current.health = 100;
       player.current.integrity = 100;
       player.current.memoriesCollected = 0;
+      player.current._hasPickedMask = false; // allow first-mask tutorial again this run
       lastReported.current = { health: 100, integrity: 100 };
       setCurrentHealth(100);
       setCurrentIntegrity(100);
       setCollectedMemories(0);
+      // reset per-run flags
+      levelState.current.healthWarningShown = false;
+
       switchMask(MaskType.NONE);
       generateLevel(0);
     }
@@ -1937,11 +1995,33 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     if (l.practiceActive) {
       const now = Date.now();
       const elapsed = now - (l.practiceStarted || now);
+
+      // RIGHT: simple movement check
       if (l.practiceExpect === "right" && keys.current.right) {
         l.practiceActive = false;
+        // cleanup practice spawns
+        l.obstacles = l.obstacles.filter((o) => !(o as any)._practiceSpawn);
         window.dispatchEvent(new CustomEvent("practice-success"));
-      } else if (elapsed >= (l.practiceTimeout || 2000)) {
+      }
+
+      // JUMP: detect a recent jump (key handler stamps lastJumpTime)
+      else if (
+        l.practiceExpect === "jump" &&
+        player.current.lastJumpTime &&
+        player.current.lastJumpTime >= (l.practiceStarted || 0)
+      ) {
         l.practiceActive = false;
+        l.obstacles = l.obstacles.filter((o) => !(o as any)._practiceSpawn);
+        window.dispatchEvent(new CustomEvent("practice-success"));
+      }
+
+      // COLLECT: allow time for the player to jump and touch the spawned memory;
+      // success is detected on collision (see memory handler). Here we only
+      // handle timeout/cleanup.
+      else if (elapsed >= (l.practiceTimeout || 2000)) {
+        l.practiceActive = false;
+        // remove practice-spawned memory if still present
+        l.obstacles = l.obstacles.filter((o) => !(o as any)._practiceSpawn);
         window.dispatchEvent(new CustomEvent("practice-timeout"));
       }
     }
@@ -2161,6 +2241,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           p.memoriesCollected++;
           setCollectedMemories(p.memoriesCollected);
           triggerAI("memory_collect", true);
+
+          // If this was a practice-spawned memory, count it as practice success
+          if (
+            levelState.current.practiceActive &&
+            levelState.current.practiceExpect === "collect"
+          ) {
+            // remove any remaining practice-spawned tokens and finish practice
+            levelState.current.obstacles = levelState.current.obstacles.filter(
+              (o) => !(o as any)._practiceSpawn,
+            );
+            levelState.current.practiceActive = false;
+            window.dispatchEvent(new CustomEvent("practice-success"));
+          }
         } else if (obs.type === "wall" || obs.type === "block") {
           const isWall = obs.type === "wall";
           if (isWall && p.mask === obs.reqMask) continue; // Pass through
@@ -2301,6 +2394,35 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     player.current.hurtTimer = 10;
     player.current.scaleX = 0.8;
     player.current.scaleY = 0.8;
+
+    // show a HUD-level thought-bubble only once per run; subsequent damage will use short AI messages
+    try {
+      const now = Date.now();
+      if (!levelState.current.healthWarningShown) {
+        levelState.current.healthWarningShown = true;
+        window.dispatchEvent(
+          new CustomEvent("show-thought-bubble", {
+            detail: {
+              text: "Cảnh báo: chạm vật cản hoặc va vào tường khi không đeo mặt nạ phù hợp sẽ làm giảm Vitals.",
+              duration: 3500,
+              target: "health",
+            },
+          }),
+        );
+      } else {
+        // fallback: small AI line (throttled) so player still gets feedback
+        if (
+          !aiState.current.lastMessageTime ||
+          now - aiState.current.lastMessageTime > 1800
+        ) {
+          aiState.current.lastMessageTime = now;
+          triggerAI("damage");
+        }
+      }
+    } catch (err) {
+      /* ignore */
+    }
+
     if (
       Math.abs(player.current.health - lastReported.current.health) > 1 ||
       player.current.health <= 0
@@ -2993,15 +3115,54 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         /* ignore */
       }
     };
+
+    // Respond to on-demand head-position requests (used by HUD to keep
+    // spotlight / speech-bubble aligned when the HUD needs more frequent
+    // updates than the canvas's throttled tick dispatch).
+    const onRequestHeadPos = () => {
+      try {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / CANVAS_WIDTH;
+        const scaleY = rect.height / CANVAS_HEIGHT;
+        const cover = Math.max(scaleX, scaleY);
+        const offsetX = (rect.width - CANVAS_WIDTH * cover) / 2;
+        const offsetY = (rect.height - CANVAS_HEIGHT * cover) / 2;
+        const p = player.current;
+        // logical head position: draw translates to (p.x + p.width/2, p.y + p.height)
+        const headLogicalX = p.x + p.width / 2;
+        const headLogicalY = p.y + p.height - 42;
+        const clientX = rect.left + offsetX + headLogicalX * cover;
+        const clientY = rect.top + offsetY + headLogicalY * cover;
+        window.dispatchEvent(
+          new CustomEvent("player-head-pos", {
+            detail: { x: clientX, y: clientY },
+          }),
+        );
+      } catch (err) {
+        /* ignore */
+      }
+    };
+
     window.addEventListener(
       "focus-game-canvas",
       onFocusRequest as EventListener,
     );
-    return () =>
+    window.addEventListener(
+      "request-player-head-pos",
+      onRequestHeadPos as EventListener,
+    );
+    return () => {
       window.removeEventListener(
         "focus-game-canvas",
         onFocusRequest as EventListener,
       );
+      window.removeEventListener(
+        "request-player-head-pos",
+        onRequestHeadPos as EventListener,
+      );
+    };
   }, []);
 
   return (

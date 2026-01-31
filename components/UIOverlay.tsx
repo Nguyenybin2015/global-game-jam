@@ -103,6 +103,18 @@ const UIOverlay: React.FC<UIProps> = ({
   const [bubbleHeight, setBubbleHeight] = useState(0);
   const [bubbleWidth, setBubbleWidth] = useState(0);
 
+  // transient ThoughtBubble triggered by canvas (may target HUD elements)
+  const [transientThought, setTransientThought] = useState<null | {
+    text: string;
+    duration?: number;
+    target?: string;
+    anchor?: { x: number; y: number; w: number; h: number };
+  }>(null);
+  const transientTimerRef = useRef<number | null>(null);
+
+  // ref for HUD health card so bubbles can anchor to it
+  const healthRef = useRef<HTMLDivElement | null>(null);
+
   // movement hint state & helpers (shown after the intro ThoughtBubble finishes)
   const [showMovementHint, setShowMovementHint] = useState(false);
   const suppressMovementHintRef = useRef(false);
@@ -171,6 +183,55 @@ const UIOverlay: React.FC<UIProps> = ({
     };
     window.addEventListener("player-head-pos", onHeadPos as EventListener);
 
+    // Transient ThoughtBubble (canvas can request a short bubble anchored to player head or HUD)
+    const onShowThought = (ev: Event) => {
+      const d: any = (ev as CustomEvent).detail || {};
+      const text = d.text || "";
+      const duration = typeof d.duration === "number" ? d.duration : 3000;
+
+      // If the canvas requests the HUD health as the anchor, compute rect now
+      if (d.target === "health" && healthRef.current) {
+        try {
+          const r = healthRef.current.getBoundingClientRect();
+          const anchor = { x: r.left, y: r.top, w: r.width, h: r.height };
+          setBubblePos({
+            x: Math.round(r.left + r.width / 2),
+            y: Math.round(r.top + r.height / 2),
+          });
+          setTransientThought({ text, duration, target: "health", anchor });
+        } catch (err) {
+          // fallback to player-head anchoring
+          setTransientThought({ text, duration });
+          try {
+            window.dispatchEvent(new Event("request-player-head-pos"));
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      } else {
+        setTransientThought({ text, duration });
+        // request an immediate head-pos so the bubble aligns right away
+        try {
+          window.dispatchEvent(new Event("request-player-head-pos"));
+        } catch (err) {
+          /* ignore */
+        }
+      }
+
+      if (transientTimerRef.current) {
+        window.clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = null;
+      }
+      transientTimerRef.current = window.setTimeout(() => {
+        setTransientThought(null);
+        transientTimerRef.current = null;
+      }, duration) as unknown as number;
+    };
+    window.addEventListener(
+      "show-thought-bubble",
+      onShowThought as EventListener,
+    );
+
     return () => {
       window.removeEventListener("proc-levels", onProc as EventListener);
       window.removeEventListener(
@@ -187,6 +248,14 @@ const UIOverlay: React.FC<UIProps> = ({
         onEndlessLevel as EventListener,
       );
       window.removeEventListener("player-head-pos", onHeadPos as EventListener);
+      window.removeEventListener(
+        "show-thought-bubble",
+        onShowThought as EventListener,
+      );
+      if (transientTimerRef.current) {
+        window.clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -250,8 +319,43 @@ const UIOverlay: React.FC<UIProps> = ({
     return () => window.removeEventListener("resize", measure);
   }, [showEndlessSpeech, bubblePos]);
 
-  // show a sequenced movement hint (right -> left) after the ThoughtBubble finishes
-  const [movementPhase, setMovementPhase] = useState<0 | 1 | null>(null); // 0 = right, 1 = left, null = off
+  // When the movement hint or a transient ThoughtBubble is visible, poll the canvas for a fresher head position
+  // (canvas throttles player-head-pos; requesting more frequently keeps the
+  // spotlight tightly aligned while the HUD element is shown).
+  const requestPosIntervalRef = useRef<number | null>(null);
+  useEffect(() => {
+    const active = showMovementHint || !!transientThought;
+    if (!active) {
+      if (requestPosIntervalRef.current) {
+        window.clearInterval(requestPosIntervalRef.current);
+        requestPosIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // request an immediate update and then poll at ~80ms for smoothness
+    try {
+      window.dispatchEvent(new Event("request-player-head-pos"));
+      requestPosIntervalRef.current = window.setInterval(() => {
+        window.dispatchEvent(new Event("request-player-head-pos"));
+      }, 80) as unknown as number;
+    } catch (err) {
+      /* ignore */
+    }
+
+    return () => {
+      if (requestPosIntervalRef.current) {
+        window.clearInterval(requestPosIntervalRef.current);
+        requestPosIntervalRef.current = null;
+      }
+    };
+  }, [showMovementHint, transientThought]);
+
+  // show a sequenced movement hint (right -> left -> jump -> collect) after the ThoughtBubble finishes
+  // phases: 0 = right, 1 = left, 2 = jump, 3 = collect, null = off
+  const [movementPhase, setMovementPhase] = useState<0 | 1 | 2 | 3 | null>(
+    null,
+  );
   const movementPhaseRef = useRef<number | null>(null);
   const movementSeqTimerRef = useRef<number | null>(null);
 
@@ -294,28 +398,75 @@ const UIOverlay: React.FC<UIProps> = ({
     // keydown listener for advancing the phased tutorial via real input
     const onTutorialKey = (e: KeyboardEvent) => {
       if (!showMovementHint) return;
+
+      // phase 0 -> right
       if (
         movementPhaseRef.current === 0 &&
         (e.code === "ArrowRight" || e.code === "KeyD")
       ) {
-        // advance to left phase
         setMovementPhase(1);
         movementPhaseRef.current = 1;
         if (movementSeqTimerRef.current) {
           window.clearTimeout(movementSeqTimerRef.current);
           movementSeqTimerRef.current = null;
         }
-        // schedule fallback hide
         movementSeqTimerRef.current = window.setTimeout(() => {
           setShowMovementHint(false);
           setMovementPhase(null);
           movementSeqTimerRef.current = null;
         }, 1200);
-      } else if (
+        return;
+      }
+
+      // phase 1 -> left
+      if (
         movementPhaseRef.current === 1 &&
         (e.code === "ArrowLeft" || e.code === "KeyA")
       ) {
-        // finish the tutorial
+        setMovementPhase(2);
+        movementPhaseRef.current = 2;
+        if (movementSeqTimerRef.current) {
+          window.clearTimeout(movementSeqTimerRef.current);
+          movementSeqTimerRef.current = null;
+        }
+        movementSeqTimerRef.current = window.setTimeout(() => {
+          setMovementPhase(3);
+          movementPhaseRef.current = 3;
+          movementSeqTimerRef.current = window.setTimeout(() => {
+            setShowMovementHint(false);
+            setMovementPhase(null);
+            movementPhaseRef.current = null;
+            movementSeqTimerRef.current = null;
+          }, 1200);
+        }, 800);
+        return;
+      }
+
+      // phase 2 -> jump
+      if (
+        movementPhaseRef.current === 2 &&
+        (e.code === "Space" || e.code === "KeyW")
+      ) {
+        setMovementPhase(3);
+        movementPhaseRef.current = 3;
+        if (movementSeqTimerRef.current) {
+          window.clearTimeout(movementSeqTimerRef.current);
+          movementSeqTimerRef.current = null;
+        }
+        movementSeqTimerRef.current = window.setTimeout(() => {
+          setShowMovementHint(false);
+          setMovementPhase(null);
+          movementPhaseRef.current = null;
+          movementSeqTimerRef.current = null;
+        }, 1200);
+        return;
+      }
+
+      // phase 3 -> collect (press Space to attempt collect)
+      if (
+        movementPhaseRef.current === 3 &&
+        (e.code === "Space" || e.code === "KeyW")
+      ) {
         setShowMovementHint(false);
         setMovementPhase(null);
         movementPhaseRef.current = null;
@@ -323,6 +474,7 @@ const UIOverlay: React.FC<UIProps> = ({
           window.clearTimeout(movementSeqTimerRef.current);
           movementSeqTimerRef.current = null;
         }
+        return;
       }
     };
 
@@ -458,6 +610,40 @@ const UIOverlay: React.FC<UIProps> = ({
   // Tutorial: close with Escape for quick keyboard access
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // If a transient ThoughtBubble is visible, dismiss it on movement or Escape
+      if (transientThought) {
+        const codes = [
+          "ArrowLeft",
+          "ArrowRight",
+          "KeyA",
+          "KeyD",
+          "Space",
+          "KeyW",
+        ];
+        if (codes.includes(e.code) || e.key === "Escape") {
+          setTransientThought(null);
+          setShowMovementHint(false);
+          setMovementPhase(null);
+          try {
+            if (transientTimerRef.current) {
+              window.clearTimeout(transientTimerRef.current);
+              transientTimerRef.current = null;
+            }
+            if (movementSeqTimerRef.current) {
+              window.clearTimeout(movementSeqTimerRef.current);
+              movementSeqTimerRef.current = null;
+            }
+            if (hintTimerRef.current) {
+              window.clearTimeout(hintTimerRef.current);
+              hintTimerRef.current = null;
+            }
+          } catch (err) {
+            /* ignore */
+          }
+          return;
+        }
+      }
+
       // close tutorial with Escape (existing behavior)
       if (e.key === "Escape" && gameState === GameState.TUTORIAL) {
         setGameState(GameState.START);
@@ -488,6 +674,30 @@ const UIOverlay: React.FC<UIProps> = ({
 
     // practice feedback from canvas
     const onPracticeSuccess = () => {
+      // hide any movement hint immediately (covers the 'collect' flow)
+      setShowMovementHint(false);
+      setMovementPhase(null);
+      // also dismiss any transient ThoughtBubble
+      setTransientThought(null);
+
+      // clear timers used by the hint sequencing
+      try {
+        if (movementSeqTimerRef.current) {
+          window.clearTimeout(movementSeqTimerRef.current);
+          movementSeqTimerRef.current = null;
+        }
+        if (hintTimerRef.current) {
+          window.clearTimeout(hintTimerRef.current);
+          hintTimerRef.current = null;
+        }
+        if (transientTimerRef.current) {
+          window.clearTimeout(transientTimerRef.current);
+          transientTimerRef.current = null;
+        }
+      } catch (err) {
+        /* ignore */
+      }
+
       window.dispatchEvent(
         new CustomEvent("player-feedback", {
           detail: { msg: "Tốt! Bạn đã di chuyển." },
@@ -496,6 +706,26 @@ const UIOverlay: React.FC<UIProps> = ({
       setTimeout(() => setGameState(GameState.TUTORIAL), 650);
     };
     const onPracticeTimeout = () => {
+      setShowMovementHint(false);
+      setMovementPhase(null);
+      setTransientThought(null);
+      try {
+        if (movementSeqTimerRef.current) {
+          window.clearTimeout(movementSeqTimerRef.current);
+          movementSeqTimerRef.current = null;
+        }
+        if (hintTimerRef.current) {
+          window.clearTimeout(hintTimerRef.current);
+          hintTimerRef.current = null;
+        }
+        if (transientTimerRef.current) {
+          window.clearTimeout(transientTimerRef.current);
+          transientTimerRef.current = null;
+        }
+      } catch (err) {
+        /* ignore */
+      }
+
       window.dispatchEvent(
         new CustomEvent("player-feedback", {
           detail: { msg: "Không sao — bạn cũng có thể thử lại." },
@@ -877,16 +1107,16 @@ const UIOverlay: React.FC<UIProps> = ({
         {/* Campaign modal: list 10 fixed levels, show which were played (3★ when completed) */}
         {showCampaignModal && (
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Chiến dịch — 10 màn"
-            className="fixed inset-0 z-50 flex items-center justify-center p-6"
+            role='dialog'
+            aria-modal='true'
+            aria-label='Chiến dịch — 10 màn'
+            className='fixed inset-0 z-50 flex items-center justify-center p-6'
           >
             <div className='w-[760px] max-w-full bg-black/85 border border-white/6 rounded-lg p-5 text-sm text-gray-200 shadow-2xl'>
               <div className='flex items-center justify-between mb-4'>
                 <div>
-                  <div className="text-lg font-bold">Chiến dịch — 10 màn</div>
-                  <div className="text-xs text-gray-400">
+                  <div className='text-lg font-bold'>Chiến dịch — 10 màn</div>
+                  <div className='text-xs text-gray-400'>
                     Danh sách bản đồ cố định. Màn đã chơi sẽ được đánh dấu 3★.
                   </div>
                 </div>
@@ -921,7 +1151,7 @@ const UIOverlay: React.FC<UIProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-3 max-h-[56vh] overflow-auto pr-2">
+              <div className='grid grid-cols-4 gap-3 max-h-[56vh] overflow-auto pr-2'>
                 {Array.from({ length: 10 }).map((_, i) => {
                   const played = completedLevels.has(i);
                   const name =
@@ -1078,10 +1308,10 @@ const UIOverlay: React.FC<UIProps> = ({
                     <div className='text-xs text-gray-400 mb-2'>
                       Thực hành di chuyển
                     </div>
-                    <div className='flex gap-2'>
+                    <div className='flex gap-2 items-center'>
                       <button
                         onClick={() => {
-                          // focus canvas and enter a short practice window
+                          // focus canvas and enter a short practice window (move right)
                           window.dispatchEvent(new Event("focus-game-canvas"));
                           window.dispatchEvent(
                             new CustomEvent("practice-move", {
@@ -1093,6 +1323,38 @@ const UIOverlay: React.FC<UIProps> = ({
                         className='px-3 py-2 bg-emerald-500 text-black rounded font-semibold'
                       >
                         THỬ DI CHUYỂN →
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // practice jump
+                          window.dispatchEvent(new Event("focus-game-canvas"));
+                          window.dispatchEvent(
+                            new CustomEvent("practice-move", {
+                              detail: { expect: "jump", timeoutMs: 2500 },
+                            }),
+                          );
+                          setGameState(GameState.PLAYING);
+                        }}
+                        className='px-3 py-2 border border-white/6 rounded text-sm text-gray-200'
+                      >
+                        THỬ NHẢY
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // practice collect (spawn a star + jump)
+                          window.dispatchEvent(new Event("focus-game-canvas"));
+                          window.dispatchEvent(
+                            new CustomEvent("practice-move", {
+                              detail: { expect: "collect", timeoutMs: 3500 },
+                            }),
+                          );
+                          setGameState(GameState.PLAYING);
+                        }}
+                        className='px-3 py-2 border border-white/6 rounded text-sm text-gray-200'
+                      >
+                        THỬ ĂN SAO
                       </button>
 
                       <div className='text-xs text-gray-300 self-center'>
@@ -1110,7 +1372,7 @@ const UIOverlay: React.FC<UIProps> = ({
                       <div className='w-8 h-8 rounded bg-white/6 flex items-center justify-center'>
                         1
                       </div>
-                      <div className="text-sm">
+                      <div className='text-sm'>
                         Chiến dịch — 10 màn (bấm để mở danh sách)
                       </div>
                     </div>
@@ -1268,7 +1530,7 @@ const UIOverlay: React.FC<UIProps> = ({
             <div className='mb-3 text-sm text-amber-100'>
               <div>
                 Chiến dịch 10 màn — thời gian:{" "}
-                <span className="font-mono">
+                <span className='font-mono'>
                   {formatTime(lastCampaignRun.totalTimeMs)}
                 </span>
               </div>
@@ -1282,8 +1544,8 @@ const UIOverlay: React.FC<UIProps> = ({
           )}
 
           {procMode && !lastCampaignRun && (
-            <div className="text-sm text-amber-200 mb-4">
-              Chiến dịch 10 màn: <span className="font-semibold">BẬT</span>
+            <div className='text-sm text-amber-200 mb-4'>
+              Chiến dịch 10 màn: <span className='font-semibold'>BẬT</span>
             </div>
           )}
 
@@ -1326,279 +1588,402 @@ const UIOverlay: React.FC<UIProps> = ({
     <>
       <div className='absolute inset-0 pointer-events-none overflow-visible'>
         {/* Thought bubble rendered at player head when position is available */}
-        {(showEndlessSpeech || showMovementHint) && bubblePos && (
-          <>
-            {/**
+        {(showEndlessSpeech || showMovementHint || transientThought) &&
+          bubblePos && (
+            <>
+              {/**
               Full-screen darkening overlay with a single circular "hole" (spotlight).
               - When `showEndlessSpeech` is true we enclose both head + bubble.
               - When `showMovementHint` is true (after Continue) we focus the circle on the player head.
               - Pointer-events are disabled so this overlay never blocks input.
             */}
-            {(() => {
-              // head position (player) — `bubblePos` is dispatched from the canvas
-              const headX = bubblePos.x;
-              const headY = bubblePos.y;
-
-              let cx = headX;
-              let cy = headY;
-              let radius = 72; // default spotlight around head
-
-              if (showEndlessSpeech) {
-                // bubble center (approx)
-                const bubbleCx = bubblePos.x + 270;
-                const bubbleCy = bubblePos.y - 150 - (bubbleHeight || 110) / 2;
-                // minimal enclosing circle for head + bubble
-                cx = (headX + bubbleCx) / 2;
-                cy = (headY + bubbleCy) / 2;
-                const dx = bubbleCx - headX;
-                const dy = bubbleCy - headY;
-                const dist = Math.hypot(dx, dy);
-                const headRadius = 48;
-                const bubbleRadius = Math.max(
-                  (bubbleWidth || 520) / 2,
-                  (bubbleHeight || 200) / 2,
-                );
-                radius = Math.ceil(
-                  Math.max(headRadius, bubbleRadius, dist / 2) + 36,
-                );
-              } else if (showMovementHint) {
-                // spotlight focused tightly around the head to guide the player
-                cx = headX;
-                cy = headY;
-                radius = 160; // tight circle around player
-              }
-
-              // soften the vignette edge
-              const innerClear = Math.max(10, radius - 28);
-              const outerSoft = radius + 28;
-
-              // Use a softer overlay during the short movement hint so the scene
-              // remains readable (user requested "đỡ đen hơn"). Keep the stronger
-              // vignette for the full ThoughtBubble intro.
-              const overlayMid = showMovementHint ? 0.36 : 0.55; // mid-tone alpha
-              const overlayOuter = showMovementHint ? 0.6 : 0.82; // outer alpha
-
-              const bg = `radial-gradient(circle at ${Math.round(cx)}px ${Math.round(cy)}px, rgba(0,0,0,0) ${innerClear}px, rgba(0,0,0,${overlayMid}) ${Math.round(innerClear + 6)}px, rgba(0,0,0,${overlayOuter}) ${outerSoft}px)`;
-
-              return (
-                <div
-                  aria-hidden
-                  style={{
-                    position: "fixed",
-                    left: 0,
-                    top: 0,
-                    width: "100%",
-                    height: "100%",
-                    pointerEvents: "none",
-                    zIndex: 38,
-                    transition: "opacity 220ms ease-out",
-                    opacity: 1,
-                    background: bg,
-                    mixBlendMode: "normal",
-                  }}
-                />
-              );
-            })()}
-
-            {/* actual bubble (above the dark overlay) */}
-            <div
-              ref={(el) => (bubbleRef.current = el)}
-              className='pointer-events-none z-40'
-              style={{
-                position: "absolute",
-                left: bubblePos.x + 270,
-                top: bubblePos.y - bubbleHeight - 150,
-                transform: "translateX(-50%)",
-                transition: "top 120ms ease-out, opacity 120ms",
-              }}
-            >
-              {showEndlessSpeech && !showMovementHint && (
-                <ThoughtBubble
-                  text={`Nhân vật chính bị lạc khỏi “Nhà” – nơi tượng trưng cho bản ngã nguyên vẹn.\nTrên hành trình lớn lên, đi học, đi làm, hòa nhập xã hội, anh ta buộc phải đeo nhiều “mặt nạ”.\nMỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng làm mòn Identity Integrity.\nChỉ khi biết khi nào nên đeo – khi nào nên tháo, nhân vật mới có thể trở về Nhà.`}
-                  onSkip={() => {
-                    try {
-                      if (
-                        typeof window !== "undefined" &&
-                        window.speechSynthesis
-                      )
-                        window.speechSynthesis.cancel();
-                    } catch (err) {
-                      /* ignore */
-                    }
-
-                    // Hide the ThoughtBubble but show the guided spotlight + movement hint
-                    setShowEndlessSpeech(false);
-
-                    // show the movement hint (same flow as natural end)
-                    setShowMovementHint(true);
-                    if (hintTimerRef.current)
-                      window.clearTimeout(hintTimerRef.current);
-                    hintTimerRef.current = window.setTimeout(() => {
-                      setShowMovementHint(false);
-                      hintTimerRef.current = null;
-                    }, 3500);
-
-                    // ensure canvas is focused so input works immediately
-                    try {
-                      window.dispatchEvent(new Event("focus-game-canvas"));
-                    } catch (err) {
-                      /* ignore */
-                    }
-                  }}
-                  showSkip={true}
-                />
-              )}
-            </div>
-
-            {/* movement hint shown after the ThoughtBubble finishes */}
-            {showMovementHint &&
-              bubblePos &&
-              (() => {
+              {(() => {
+                // head position (player) — `bubblePos` is dispatched from the canvas
                 const headX = bubblePos.x;
                 const headY = bubblePos.y;
-                const fallbackBubbleH = Math.max(110, bubbleHeight || 110);
-                const hintLeft = showEndlessSpeech
-                  ? bubblePos.x + 270
-                  : headX + 64; // place next to player when continuing
-                const hintTop = showEndlessSpeech
-                  ? bubblePos.y - (bubbleHeight || fallbackBubbleH) - 86
-                  : headY - 44;
+
+                let cx = headX;
+                let cy = headY;
+                let radius = 72; // default spotlight around head
+
+                if (showEndlessSpeech) {
+                  // bubble center (approx)
+                  const bubbleCx = bubblePos.x + 270;
+                  const bubbleCy =
+                    bubblePos.y - 150 - (bubbleHeight || 110) / 2;
+                  // minimal enclosing circle for head + bubble
+                  cx = (headX + bubbleCx) / 2;
+                  cy = (headY + bubbleCy) / 2;
+                  const dx = bubbleCx - headX;
+                  const dy = bubbleCy - headY;
+                  const dist = Math.hypot(dx, dy);
+                  const headRadius = 48;
+                  const bubbleRadius = Math.max(
+                    (bubbleWidth || 520) / 2,
+                    (bubbleHeight || 200) / 2,
+                  );
+                  radius = Math.ceil(
+                    Math.max(headRadius, bubbleRadius, dist / 2) + 36,
+                  );
+                } else if (showMovementHint) {
+                  // spotlight focused tightly around the head to guide the player
+                  cx = headX;
+                  cy = headY;
+                  radius = 160; // tight circle around player
+                }
+
+                // soften the vignette edge
+                const innerClear = Math.max(10, radius - 28);
+                const outerSoft = radius + 28;
+
+                // Use a softer overlay during the short movement hint so the scene
+                // remains readable (user requested "đỡ đen hơn"). Keep the stronger
+                // vignette for the full ThoughtBubble intro.
+                const overlayMid = showMovementHint ? 0.36 : 0.55; // mid-tone alpha
+                const overlayOuter = showMovementHint ? 0.6 : 0.82; // outer alpha
+
+                const bg = `radial-gradient(circle at ${Math.round(cx)}px ${Math.round(cy)}px, rgba(0,0,0,0) ${innerClear}px, rgba(0,0,0,${overlayMid}) ${Math.round(innerClear + 6)}px, rgba(0,0,0,${overlayOuter}) ${outerSoft}px)`;
 
                 return (
                   <div
                     aria-hidden
-                    className='pointer-events-none z-40'
                     style={{
-                      position: "absolute",
-                      left: hintLeft,
-                      top: hintTop,
-                      transform: "translateX(-50%)",
-                      transition:
-                        "opacity 220ms ease-out, transform 260ms ease-out",
-                      opacity: showMovementHint ? 1 : 0,
+                      position: "fixed",
+                      left: 0,
+                      top: 0,
+                      width: "100%",
+                      height: "100%",
+                      pointerEvents: "none",
+                      zIndex: 38,
+                      transition: "opacity 220ms ease-out",
+                      opacity: 1,
+                      background: bg,
+                      mixBlendMode: "normal",
                     }}
-                  >
-                    {/* phased tutorial buttons (separate interactive controls) */}
-                    {movementPhase === 0 && (
-                      <div style={{ display: "flex", gap: 12 }}>
-                        <button
-                          onClick={() => {
-                            // simulate move-right so the player moves
-                            window.dispatchEvent(
-                              new KeyboardEvent("keydown", {
-                                code: "ArrowRight",
-                              }),
-                            );
-                            window.dispatchEvent(
-                              new KeyboardEvent("keydown", { code: "KeyD" }),
-                            );
-
-                            // advance the tutorial to the LEFT phase (don't fully dismiss)
-                            setMovementPhase(1);
-
-                            // clear any existing sequence timer and schedule a fallback to auto-hide
-                            if (movementSeqTimerRef.current) {
-                              window.clearTimeout(movementSeqTimerRef.current);
-                              movementSeqTimerRef.current = null;
-                            }
-                            movementSeqTimerRef.current = window.setTimeout(
-                              () => {
-                                setShowMovementHint(false);
-                                setMovementPhase(null);
-                                movementSeqTimerRef.current = null;
-                              },
-                              1400,
-                            ); // short buffer before auto-advance/hide
-                          }}
-                          aria-label='Di chuyển: sang phải (D hoặc →)'
-                          className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
-                          style={{ backdropFilter: "blur(6px)" }}
-                        >
-                          <div
-                            className={`text-xl leading-none ${!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "hint-bounce" : ""}`}
-                          >
-                            ▶
-                          </div>
-                          {/* <div className='font-mono bg-white/6 px-2 py-1 rounded text-xs'>
-                            D
-                          </div> */}
-                        </button>
-
-                        <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
-                          <div className='font-semibold text-amber-200'>
-                            Nhấn D hoặc →
-                          </div>
-                          <div
-                            className='text-sm text-white font-semibold mt-1'
-                            style={{ textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}
-                          >
-                            Di chuyển sang phải để tiến tới mảnh ký ức hoặc vật
-                            phẩm.
-                          </div>
-                        </div>
-
-                        <div className='sr-only' aria-hidden>
-                          —
-                        </div>
-                      </div>
-                    )}
-
-                    {movementPhase === 1 && (
-                      <div style={{ display: "flex", gap: 12 }}>
-                        <button
-                          onClick={() => {
-                            // simulate move-left and dismiss tutorial
-                            window.dispatchEvent(
-                              new KeyboardEvent("keydown", {
-                                code: "ArrowLeft",
-                              }),
-                            );
-                            window.dispatchEvent(
-                              new KeyboardEvent("keydown", { code: "KeyA" }),
-                            );
-                            setShowMovementHint(false);
-                            setMovementPhase(null);
-                            if (movementSeqTimerRef.current)
-                              window.clearTimeout(movementSeqTimerRef.current);
-                            movementSeqTimerRef.current = null;
-                          }}
-                          aria-label='Di chuyển: sang trái (A hoặc ←)'
-                          className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
-                          style={{ backdropFilter: "blur(6px)" }}
-                        >
-                          {/* <div className='font-mono bg-white/6 px-2 py-1 rounded text-xs'>
-                            A
-                          </div> */}
-                          <div
-                            className={`text-xl leading-none ${!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "hint-bounce" : ""}`}
-                          >
-                            ◀
-                          </div>
-                        </button>
-
-                        <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
-                          <div className='font-semibold text-amber-200'>
-                            Nhấn A hoặc ←
-                          </div>
-                          <div
-                            className='text-sm text-white font-semibold mt-1'
-                            style={{ textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}
-                          >
-                            Di chuyển sang trái để tránh chướng ngại hoặc tới vị
-                            trí cần thiết.
-                          </div>
-                        </div>
-
-                        <div className='sr-only' aria-hidden>
-                          —
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  />
                 );
               })()}
-          </>
-        )}
+
+              {/* actual bubble (above the dark overlay) */}
+              <div
+                ref={(el) => (bubbleRef.current = el)}
+                className='pointer-events-none z-40'
+                style={{
+                  position: "absolute",
+                  left:
+                    transientThought?.target === "health" &&
+                    transientThought.anchor
+                      ? bubblePos.x
+                      : bubblePos.x + 270,
+                  top:
+                    transientThought?.target === "health" &&
+                    transientThought.anchor
+                      ? bubblePos.y + transientThought.anchor.h / 2 + 12
+                      : bubblePos.y - bubbleHeight - 150,
+                  transform: "translateX(-50%)",
+                  transition: "top 120ms ease-out, opacity 120ms",
+                }}
+              >
+                {showEndlessSpeech && !showMovementHint && (
+                  <ThoughtBubble
+                    text={`Nhân vật chính bị lạc khỏi “Nhà” – nơi tượng trưng cho bản ngã nguyên vẹn.\nTrên hành trình lớn lên, đi học, đi làm, hòa nhập xã hội, anh ta buộc phải đeo nhiều “mặt nạ”.\nMỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng làm mòn Identity Integrity.\nChỉ khi biết khi nào nên đeo – khi nào nên tháo, nhân vật mới có thể trở về Nhà.`}
+                    onSkip={() => {
+                      try {
+                        if (
+                          typeof window !== "undefined" &&
+                          window.speechSynthesis
+                        )
+                          window.speechSynthesis.cancel();
+                      } catch (err) {
+                        /* ignore */
+                      }
+
+                      // Hide the ThoughtBubble but show the guided spotlight + movement hint
+                      setShowEndlessSpeech(false);
+
+                      // show the movement hint (same flow as natural end)
+                      setShowMovementHint(true);
+                      if (hintTimerRef.current)
+                        window.clearTimeout(hintTimerRef.current);
+                      hintTimerRef.current = window.setTimeout(() => {
+                        setShowMovementHint(false);
+                        hintTimerRef.current = null;
+                      }, 3500);
+
+                      // ensure canvas is focused so input works immediately
+                      try {
+                        window.dispatchEvent(new Event("focus-game-canvas"));
+                      } catch (err) {
+                        /* ignore */
+                      }
+                    }}
+                    showSkip={true}
+                  />
+                )}
+
+                {transientThought && (
+                  <div style={{ transform: "translateX(-50%)" }}>
+                    <ThoughtBubble
+                      text={transientThought.text}
+                      onSkip={() => setTransientThought(null)}
+                      showSkip={true}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* movement hint shown after the ThoughtBubble finishes */}
+              {showMovementHint &&
+                bubblePos &&
+                (() => {
+                  const headX = bubblePos.x;
+                  const headY = bubblePos.y;
+                  const fallbackBubbleH = Math.max(110, bubbleHeight || 110);
+                  const hintLeft = showEndlessSpeech
+                    ? bubblePos.x + 270
+                    : headX + 64; // place next to player when continuing
+                  const hintTop = showEndlessSpeech
+                    ? bubblePos.y - (bubbleHeight || fallbackBubbleH) - 86
+                    : headY - 44;
+
+                  return (
+                    <div
+                      aria-hidden
+                      className='pointer-events-none z-40'
+                      style={{
+                        position: "absolute",
+                        left: hintLeft,
+                        top: hintTop,
+                        transform: "translateX(-50%)",
+                        transition:
+                          "opacity 220ms ease-out, transform 260ms ease-out",
+                        opacity: showMovementHint ? 1 : 0,
+                      }}
+                    >
+                      {/* phased tutorial buttons (separate interactive controls) */}
+                      {movementPhase === 0 && (
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <button
+                            onClick={() => {
+                              // simulate move-right so the player moves
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", {
+                                  code: "ArrowRight",
+                                }),
+                              );
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", { code: "KeyD" }),
+                              );
+
+                              // advance the tutorial to the LEFT phase (don't fully dismiss)
+                              setMovementPhase(1);
+
+                              // clear any existing sequence timer and schedule a fallback to auto-hide
+                              if (movementSeqTimerRef.current) {
+                                window.clearTimeout(
+                                  movementSeqTimerRef.current,
+                                );
+                                movementSeqTimerRef.current = null;
+                              }
+                              movementSeqTimerRef.current = window.setTimeout(
+                                () => {
+                                  setShowMovementHint(false);
+                                  setMovementPhase(null);
+                                  movementSeqTimerRef.current = null;
+                                },
+                                1400,
+                              ); // short buffer before auto-advance/hide
+                            }}
+                            aria-label='Di chuyển: sang phải (D hoặc →)'
+                            className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
+                            style={{ backdropFilter: "blur(6px)" }}
+                          >
+                            <div
+                              className={`text-xl leading-none ${!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "hint-bounce" : ""}`}
+                            >
+                              ▶
+                            </div>
+                            {/* <div className='font-mono bg-white/6 px-2 py-1 rounded text-xs'>
+                            D
+                          </div> */}
+                          </button>
+
+                          <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
+                            <div className='font-semibold text-amber-200'>
+                              Nhấn D hoặc →
+                            </div>
+                            <div
+                              className='text-sm text-white font-semibold mt-1'
+                              style={{
+                                textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                              }}
+                            >
+                              Di chuyển sang phải để tiến tới mảnh ký ức hoặc
+                              vật phẩm.
+                            </div>
+                          </div>
+
+                          <div className='sr-only' aria-hidden>
+                            —
+                          </div>
+                        </div>
+                      )}
+
+                      {movementPhase === 1 && (
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <button
+                            onClick={() => {
+                              // simulate move-left and dismiss tutorial
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", {
+                                  code: "ArrowLeft",
+                                }),
+                              );
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", { code: "KeyA" }),
+                              );
+                              setShowMovementHint(false);
+                              setMovementPhase(null);
+                              if (movementSeqTimerRef.current)
+                                window.clearTimeout(
+                                  movementSeqTimerRef.current,
+                                );
+                              movementSeqTimerRef.current = null;
+                            }}
+                            aria-label='Di chuyển: sang trái (A hoặc ←)'
+                            className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
+                            style={{ backdropFilter: "blur(6px)" }}
+                          >
+                            {/* <div className='font-mono bg-white/6 px-2 py-1 rounded text-xs'>
+                            A
+                          </div> */}
+                            <div
+                              className={`text-xl leading-none ${!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "hint-bounce" : ""}`}
+                            >
+                              ◀
+                            </div>
+                          </button>
+
+                          <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
+                            <div className='font-semibold text-amber-200'>
+                              Nhấn A hoặc ←
+                            </div>
+                            <div
+                              className='text-sm text-white font-semibold mt-1'
+                              style={{
+                                textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                              }}
+                            >
+                              Di chuyển sang trái để tránh chướng ngại hoặc tới
+                              vị trí cần thiết.
+                            </div>
+                          </div>
+
+                          <div className='sr-only' aria-hidden>
+                            —
+                          </div>
+                        </div>
+                      )}
+
+                      {/** JUMP phase */}
+                      {movementPhase === 2 && (
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <button
+                            onClick={() => {
+                              // simulate jump
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", { code: "Space" }),
+                              );
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", { code: "KeyW" }),
+                              );
+
+                              // advance to collect phase
+                              setMovementPhase(3);
+                              movementPhaseRef.current = 3;
+
+                              if (movementSeqTimerRef.current) {
+                                window.clearTimeout(
+                                  movementSeqTimerRef.current,
+                                );
+                                movementSeqTimerRef.current = null;
+                              }
+                              movementSeqTimerRef.current = window.setTimeout(
+                                () => {
+                                  setShowMovementHint(false);
+                                  setMovementPhase(null);
+                                  movementSeqTimerRef.current = null;
+                                },
+                                1400,
+                              );
+                            }}
+                            aria-label='Nhảy (Space hoặc W)'
+                            className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
+                            style={{ backdropFilter: "blur(6px)" }}
+                          >
+                            <div className='text-2xl'>⎵</div>
+                          </button>
+
+                          <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
+                            <div className='font-semibold text-amber-200'>
+                              Nhấn Space hoặc W
+                            </div>
+                            <div className='text-sm text-white font-semibold mt-1'>
+                              Nhảy lên để thu những vật ở trên (ví dụ: mảnh ký
+                              ức).
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/** COLLECT phase */}
+                      {movementPhase === 3 && (
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <button
+                            onClick={() => {
+                              // spawn a practice memory and simulate jump so the player can collect it
+                              window.dispatchEvent(
+                                new CustomEvent("practice-move", {
+                                  detail: {
+                                    expect: "collect",
+                                    timeoutMs: 3500,
+                                  },
+                                }),
+                              );
+
+                              // encourage immediate jump as part of the flow
+                              window.dispatchEvent(
+                                new KeyboardEvent("keydown", { code: "Space" }),
+                              );
+
+                              // hide the hint after a short grace period
+                              setTimeout(() => {
+                                setShowMovementHint(false);
+                                setMovementPhase(null);
+                              }, 1400);
+                            }}
+                            aria-label='Thu sao (Space)'
+                            className='pointer-events-auto flex items-center gap-3 bg-[rgba(7,9,14,0.86)] text-white text-sm px-4 py-2 rounded-xl shadow-lg'
+                            style={{ backdropFilter: "blur(6px)" }}
+                          >
+                            <div className='text-xl'>✨</div>
+                          </button>
+
+                          <div className='ml-3 text-sm text-gray-100 max-w-[14rem]'>
+                            <div className='font-semibold text-amber-200'>
+                              Nhảy và thu sao
+                            </div>
+                            <div className='text-sm text-white font-semibold mt-1'>
+                              Nhấn Space để nhảy và chạm vào ngôi sao để thu nó.
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+            </>
+          )}
         <div className='absolute inset-0 z-40 pointer-events-none crt-line opacity-20'></div>
 
         {isPlaying && isLowHealth && (
@@ -2119,9 +2504,42 @@ const UIOverlay: React.FC<UIProps> = ({
       <MaskOverlay mask={mask} />
 
       <div className='absolute top-4 left-4 flex flex-col gap-3 z-30 pointer-events-none w-72'>
-        <div className='neumorph-card px-3 py-3 w-full'>
+        <div
+          ref={healthRef}
+          className={`neumorph-card px-3 py-3 w-full ${transientThought?.target === "health" ? "movement-ring spotlight-pulse" : ""}`}
+        >
           <div className='flex items-baseline justify-between gap-3 mb-2'>
-            <div className='text-[10px] font-mono text-gray-400'>VITALS</div>
+            <div className='flex items-center gap-2'>
+              <div className='text-[10px] font-mono text-gray-400'>VITALS</div>
+              <button
+                className='pointer-events-auto text-[11px] text-gray-400/90 px-2 py-1 rounded hover:bg-white/3'
+                aria-label='Giải thích Vitals'
+                title='Giải thích Vitals'
+                onClick={() => {
+                  const txt =
+                    "Lưu ý: chạm vật cản hoặc đi qua tường khi không đeo mặt nạ phù hợp sẽ làm giảm Vitals (Health/Integrity). Tháo mặt nạ (CHÂN THẬT) để hồi Integrity.";
+                  setTransientThought({
+                    text: txt,
+                    duration: 5200,
+                    target: "health",
+                  });
+                  try {
+                    if (transientTimerRef.current) {
+                      window.clearTimeout(transientTimerRef.current);
+                      transientTimerRef.current = null;
+                    }
+                    transientTimerRef.current = window.setTimeout(() => {
+                      setTransientThought(null);
+                      transientTimerRef.current = null;
+                    }, 5200) as unknown as number;
+                  } catch (err) {
+                    /* ignore */
+                  }
+                }}
+              >
+                ℹ️
+              </button>
+            </div>
             <div className='text-sm font-mono font-semibold' aria-hidden>
               <span
                 className={
@@ -2137,6 +2555,31 @@ const UIOverlay: React.FC<UIProps> = ({
             color={health < 30 ? "#FF9B8A" : "#6BD07A"}
             ariaLabel='Health'
           />
+
+          {transientThought?.target === "health" && transientThought.text && (
+            <div className='pointer-events-auto mt-3 bg-[rgba(7,9,14,0.86)] text-sm text-gray-100 p-3 rounded-lg shadow-md w-full ring-1 ring-white/6'>
+              <div className='flex items-start justify-between gap-3'>
+                <div className='leading-tight text-[13px]'>
+                  {transientThought.text}
+                </div>
+                <div className='flex-shrink-0'>
+                  <button
+                    onClick={() => {
+                      setTransientThought(null);
+                      if (transientTimerRef.current) {
+                        window.clearTimeout(transientTimerRef.current);
+                        transientTimerRef.current = null;
+                      }
+                    }}
+                    className='text-xs text-gray-300 px-2 py-1 rounded hover:bg-white/6'
+                    aria-label='Đã hiểu'
+                  >
+                    Đã hiểu
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className='neumorph-card px-3 py-3 w-full'>
