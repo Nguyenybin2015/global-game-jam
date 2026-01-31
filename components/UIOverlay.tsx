@@ -464,6 +464,11 @@ const UIOverlay: React.FC<UIProps> = ({
   const aiBorder = isLowHealth ? "border-red-500/50" : "border-green-500/50";
   const aiBg = isLowHealth ? "bg-red-500" : "bg-green-500";
 
+  const isLowIntegrity = integrity < 30;
+  const integrityWarnIntensity = isLowIntegrity
+    ? Math.min(1, (40 - integrity) / 30)
+    : 0;
+
   if (gameState === GameState.START) {
     return (
       <div className='absolute inset-0 bg-black/92 flex items-center justify-center p-6 z-50 crt-overlay'>
@@ -1649,6 +1654,17 @@ const UIOverlay: React.FC<UIProps> = ({
             <p className='text-sm'>{aiMessage}</p>
           </div>
         </div>
+
+        {isLowIntegrity && (
+          <div className='absolute top-10 left-1/2 -translate-x-1/2 z-40 pointer-events-none'>
+            <div
+              className='px-4 py-2 rounded-full bg-amber-400 text-black font-bold shadow-lg animate-pulse'
+              style={{ opacity: 0.6 + integrityWarnIntensity * 0.4 }}
+            >
+              MẤT CHẤT
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mask overlay (extracted) */}
