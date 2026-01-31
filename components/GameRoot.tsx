@@ -62,8 +62,18 @@ const GameRoot: React.FC = () => {
   // Attempt to enter fullscreen when gameplay starts (usually triggered by a user gesture)
   React.useEffect(() => {
     if (gameState === GameState.PLAYING) {
-      // best-effort enter fullscreen; will fail silently if browser blocks it
-      enterFullscreen();
+      // If a recent user action requested skipping auto-fullscreen (e.g.
+      // the UI button intended to exit fullscreen), respect that intent.
+      if ((window as any).__htvn_skipFullscreen) {
+        try {
+          delete (window as any).__htvn_skipFullscreen;
+        } catch (err) {
+          /* ignore */
+        }
+      } else {
+        // best-effort enter fullscreen; will fail silently if browser blocks it
+        enterFullscreen();
+      }
     }
     // only when gameState changes to PLAYING we try; no cleanup needed
   }, [gameState]);
@@ -71,19 +81,19 @@ const GameRoot: React.FC = () => {
   return (
     <div
       ref={rootRef}
-      className="relative w-screen h-screen bg-neutral-900 flex justify-center items-center overflow-hidden"
+      className='relative w-screen h-screen bg-neutral-900 flex justify-center items-center overflow-hidden'
     >
       <div
         onDoubleClick={toggleFullscreen}
-        className="relative shadow-2xl rounded-lg overflow-hidden border border-neutral-700 w-full h-full"
+        className='relative shadow-2xl rounded-lg overflow-hidden border border-neutral-700 w-full h-full'
       >
         {/* Fullscreen toggle (top-right) */}
-        <div className="absolute top-3 right-3 z-50 pointer-events-auto">
+        <div className='absolute top-3 right-3 z-50 pointer-events-auto'>
           <button
             onClick={toggleFullscreen}
             aria-pressed={isFullscreen}
             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            className="px-3 py-2 bg-black/60 text-white rounded-md text-sm backdrop-blur-sm hover:brightness-110 transition"
+            className='px-3 py-2 bg-black/60 text-white rounded-md text-sm backdrop-blur-sm hover:brightness-110 transition'
             title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
           >
             {isFullscreen ? "⤫" : "⤢"}
