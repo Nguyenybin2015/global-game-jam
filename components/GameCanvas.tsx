@@ -963,18 +963,38 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Preload map 1 background image (served from public/)
   const map1Image = useRef<HTMLImageElement | null>(null);
-  const map1Image2 = useRef<HTMLImageElement | null>(null);
   const trapMap1Image = useRef<HTMLImageElement | null>(null);
   // map2 assets
   const map2Image = useRef<HTMLImageElement | null>(null);
-  const map2Image2 = useRef<HTMLImageElement | null>(null);
   const ground2Image = useRef<HTMLImageElement | null>(null);
   // map3 assets
   const map3Image = useRef<HTMLImageElement | null>(null);
-  const map3Image2 = useRef<HTMLImageElement | null>(null);
   const ground3Image = useRef<HTMLImageElement | null>(null);
+  // map4 assets
+  const map4Image = useRef<HTMLImageElement | null>(null);
+  // map5 assets (level index 4)
+  const map5Image = useRef<HTMLImageElement | null>(null);
+  // map6 assets (level index 5)
+  const map6Image = useRef<HTMLImageElement | null>(null);
+  // map7 assets (level index 6)
+  const map7Image = useRef<HTMLImageElement | null>(null);
+  // map8 assets (level index 7)
+  const map8Image = useRef<HTMLImageElement | null>(null);
+  // map9 assets (level index 8)
+  const map9Image = useRef<HTMLImageElement | null>(null);
+  // map10 assets (level index 9)
+  const map10Image = useRef<HTMLImageElement | null>(null);
   const groundImage = useRef<HTMLImageElement | null>(null);
+  // per-map ground/tile images for moving ground effect
+  const ground4Image = useRef<HTMLImageElement | null>(null);
+  const ground5Image = useRef<HTMLImageElement | null>(null);
+  const ground6Image = useRef<HTMLImageElement | null>(null);
+  const ground7Image = useRef<HTMLImageElement | null>(null);
+  const ground8Image = useRef<HTMLImageElement | null>(null);
+  const ground9Image = useRef<HTMLImageElement | null>(null);
+  const ground10Image = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
+    // preload map1 background (map index 0)
     try {
       const img = new Image();
       // Prefer a bundler-resolvable `new URL(...)` (works if asset is moved into `src/`).
@@ -989,22 +1009,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       };
       img.onerror = () => {
         // ignore load errors; fallback to gradient
-      };
-    } catch (err) {
-      // ignore
-    }
-    // also preload secondary background
-    try {
-      const img2 = new Image();
-      img2.src = new URL(
-        `${import.meta.env.BASE_URL}assets/maps/map_1/background_2.png`,
-        import.meta.url,
-      ).href;
-      img2.onload = () => {
-        map1Image2.current = img2;
-      };
-      img2.onerror = () => {
-        // ignore
       };
     } catch (err) {
       // ignore
@@ -1042,21 +1046,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     } catch (err) {
       // ignore
     }
-    try {
-      const m22 = new Image();
-      m22.src = new URL(
-        `${import.meta.env.BASE_URL}assets/maps/map_2/background_map2.1.png`,
-        import.meta.url,
-      ).href;
-      m22.onload = () => {
-        map2Image2.current = m22;
-      };
-      m22.onerror = () => {
-        // ignore
-      };
-    } catch (err) {
-      // ignore
-    }
 
     // preload map3 backgrounds (map index 2)
     try {
@@ -1074,16 +1063,113 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     } catch (err) {
       // ignore
     }
+    // preload map4 background (map index 4)
     try {
-      const m32 = new Image();
-      m32.src = new URL(
-        `${import.meta.env.BASE_URL}assets/maps/map_3/school1.jpg`,
+      const m4 = new Image();
+      m4.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_4/map_4.jpg`,
         import.meta.url,
       ).href;
-      m32.onload = () => {
-        map3Image2.current = m32;
+      m4.onload = () => {
+        map4Image.current = m4;
       };
-      m32.onerror = () => {
+      m4.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map5 background (map index 4)
+    try {
+      const m5 = new Image();
+      m5.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_5/map_5.jpg`,
+        import.meta.url,
+      ).href;
+      m5.onload = () => {
+        map5Image.current = m5;
+      };
+      m5.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map6 background (map index 5)
+    try {
+      const m6 = new Image();
+      m6.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_6/map_6.jpg`,
+        import.meta.url,
+      ).href;
+      m6.onload = () => {
+        map6Image.current = m6;
+      };
+      m6.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map7 background (map index 6)
+    try {
+      const m7 = new Image();
+      m7.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_7/map_7.jpg`,
+        import.meta.url,
+      ).href;
+      m7.onload = () => {
+        map7Image.current = m7;
+      };
+      m7.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map8 background (map index 7)
+    try {
+      const m8 = new Image();
+      m8.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_8/map_8.jpg`,
+        import.meta.url,
+      ).href;
+      m8.onload = () => {
+        map8Image.current = m8;
+      };
+      m8.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map9 background (map index 8)
+    try {
+      const m9 = new Image();
+      m9.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_9/map_9.jpg`,
+        import.meta.url,
+      ).href;
+      m9.onload = () => {
+        map9Image.current = m9;
+      };
+      m9.onerror = () => {
+        // ignore
+      };
+    } catch (err) {
+      // ignore
+    }
+    // preload map10 background (map index 9)
+    try {
+      const m10 = new Image();
+      m10.src = new URL(
+        `${import.meta.env.BASE_URL}assets/maps/map_10/map_10.jpg`,
+        import.meta.url,
+      ).href;
+      m10.onload = () => {
+        map10Image.current = m10;
+      };
+      m10.onerror = () => {
         // ignore
       };
     } catch (err) {
@@ -1138,18 +1224,55 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     } catch (err) {
       // ignore
     }
+    // preload alternate ground for map4..map10
+    const preloadGround = (idx: number) => {
+      try {
+        const img = new Image();
+        img.src = new URL(
+          `${import.meta.env.BASE_URL}assets/maps/map_${idx}/ground_${idx}.jpg`,
+          import.meta.url,
+        ).href;
+        img.onload = () => {
+          if (idx === 4) ground4Image.current = img;
+          if (idx === 5) ground5Image.current = img;
+          if (idx === 6) ground6Image.current = img;
+          if (idx === 7) ground7Image.current = img;
+          if (idx === 8) ground8Image.current = img;
+          if (idx === 9) ground9Image.current = img;
+          if (idx === 10) ground10Image.current = img;
+        };
+        img.onerror = () => {
+          // ignore
+        };
+      } catch (err) {
+        // ignore
+      }
+    };
+    [4, 5, 6, 7, 8, 9, 10].forEach(preloadGround);
 
     return () => {
       map1Image.current = null;
-      map1Image2.current = null;
       trapMap1Image.current = null;
       map2Image.current = null;
-      map2Image2.current = null;
       ground2Image.current = null;
       map3Image.current = null;
-      map3Image2.current = null;
       ground3Image.current = null;
+      map8Image.current = null;
+      map9Image.current = null;
+      map10Image.current = null;
+      ground4Image.current = null;
+      ground5Image.current = null;
+      ground6Image.current = null;
+      ground7Image.current = null;
+      ground8Image.current = null;
+      ground9Image.current = null;
+      ground10Image.current = null;
       groundImage.current = null;
+      map8Image.current = null;
+      map9Image.current = null;
+      map10Image.current = null;
+      groundImage.current = null;
+      // groundImage.current = null;
     };
   }, []);
 
@@ -2244,29 +2367,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         // base/background layer
         ctx.drawImage(map1Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // optional parallax overlay layer when second image is available
-        if (map1Image2.current && map1Image2.current.complete) {
-          const parallaxFactor = 0.32; // how much the overlay lags camera
-          const scroll = (l.cameraX * parallaxFactor) % CANVAS_WIDTH;
-          // draw two copies to tile horizontally and create seamless scroll
-          ctx.save();
-          ctx.globalAlpha = 0.95;
-          ctx.drawImage(
-            map1Image2.current,
-            -scroll,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-          );
-          ctx.drawImage(
-            map1Image2.current,
-            -scroll + CANVAS_WIDTH,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-          );
-          ctx.restore();
-        }
+        // no secondary overlay for map1 — single image only
       } catch (err) {
         // If draw fails, fallback to gradient below
         const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
@@ -2284,28 +2385,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         // base/background layer for map2
         ctx.drawImage(map2Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // optional parallax overlay layer when second map2 image is available
-        if (map2Image2.current && map2Image2.current.complete) {
-          const parallaxFactor = 0.36; // slightly different parallax
-          const scroll = (l.cameraX * parallaxFactor) % CANVAS_WIDTH;
-          ctx.save();
-          ctx.globalAlpha = 0.95;
-          ctx.drawImage(
-            map2Image2.current,
-            -scroll,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-          );
-          ctx.drawImage(
-            map2Image2.current,
-            -scroll + CANVAS_WIDTH,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-          );
-          ctx.restore();
-        }
+        // no secondary overlay for map2 — single image only
       } catch (err) {
         const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
         gradient.addColorStop(0, config.bgGradient[0]);
@@ -2321,6 +2401,111 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       try {
         // Only draw base background for map3 (no overlay)
         ctx.drawImage(map3Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 3 &&
+      map4Image.current &&
+      map4Image.current.complete
+    ) {
+      try {
+        // base/background layer for map4
+        ctx.drawImage(map4Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 4 &&
+      map5Image.current &&
+      map5Image.current.complete
+    ) {
+      try {
+        // base/background layer for map5 (level index 4)
+        ctx.drawImage(map5Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 5 &&
+      map6Image.current &&
+      map6Image.current.complete
+    ) {
+      try {
+        // base/background layer for map6 (level index 5)
+        ctx.drawImage(map6Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 6 &&
+      map7Image.current &&
+      map7Image.current.complete
+    ) {
+      try {
+        // base/background layer for map7 (level index 6)
+        ctx.drawImage(map7Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 7 &&
+      map8Image.current &&
+      map8Image.current.complete
+    ) {
+      try {
+        // base/background layer for map8 (level index 7)
+        ctx.drawImage(map8Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 8 &&
+      map9Image.current &&
+      map9Image.current.complete
+    ) {
+      try {
+        // base/background layer for map9 (level index 8)
+        ctx.drawImage(map9Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } catch (err) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, config.bgGradient[0]);
+        gradient.addColorStop(1, config.bgGradient[1]);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else if (
+      l.index === 9 &&
+      map10Image.current &&
+      map10Image.current.complete
+    ) {
+      try {
+        // base/background layer for map10 (level index 9)
+        ctx.drawImage(map10Image.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       } catch (err) {
         const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
         gradient.addColorStop(0, config.bgGradient[0]);
@@ -2377,7 +2562,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ? ground2Image.current
         : l.index === 2
           ? ground3Image.current
-          : groundImage.current;
+          : l.index === 3
+            ? ground4Image.current
+            : l.index === 4
+              ? ground5Image.current
+              : l.index === 5
+                ? ground6Image.current
+                : l.index === 6
+                  ? ground7Image.current
+                  : l.index === 7
+                    ? ground8Image.current
+                    : l.index === 8
+                      ? ground9Image.current
+                      : l.index === 9
+                        ? ground10Image.current
+                        : groundImage.current;
     if (groundImg && groundImg.complete) {
       try {
         const img = groundImg;
