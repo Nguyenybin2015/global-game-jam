@@ -89,7 +89,7 @@ const LEVELS: LevelConfig[] = [
     groundColor: "#27ae60",
     reqMask: MaskType.NONE,
     message: "Hệ thống lỗi... Không thể phân tích dữ liệu 'Chân Thật'...",
-    obstacleType: "none",
+    obstacleType: "block",
     length: 1500,
   },
 ];
@@ -1521,6 +1521,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             case 2:
               wallLabel = "Khuôn Mẫu";
               wallIcon = "briefcase";
+              // override: passable when in SOCIAL persona (school conformity)
+              wallReqMask = MaskType.SOCIAL;
               break;
             case 3:
               wallLabel = `Bất Công`;
@@ -1531,22 +1533,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             case 4:
               wallLabel = "Dám Chọn";
               wallIcon = "block";
+              // override: passable when in CHILD persona (VUI VẺ)
+              wallReqMask = MaskType.CHILD;
               break;
             case 5:
               wallLabel = "Vừa Lòng";
               wallIcon = "block";
+              // override: passable when in SOCIAL persona (interview/social niceties)
+              wallReqMask = MaskType.SOCIAL;
               break;
             case 6:
               wallLabel = "Kiệt Sức";
               wallIcon = "briefcase";
+              // override: passable when in WORKER persona (anger)
+              wallReqMask = MaskType.WORKER;
               break;
             case 7:
               wallLabel = "Trống Rỗng";
               wallIcon = "mask";
+              // override: passable when in STUDENT persona (U SẦU)
+              wallReqMask = MaskType.STUDENT;
               break;
             case 8:
               wallLabel = "Danh Tính";
               wallIcon = "mask";
+              // override: passable when in CHILD persona (VUI VẺ)
+              wallReqMask = MaskType.CHILD;
               break;
             case 9:
               wallLabel = "Chân Thật";
@@ -2726,7 +2738,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       );
     }
 
-    if (l.index === 4) {
+    if (l.index === 9) {
       const hx = config.length + 50;
       const hy = CANVAS_HEIGHT - GROUND_HEIGHT;
       ctx.fillStyle = "#ecf0f1";
@@ -3213,7 +3225,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className='block w-full h-full'
+      className="block w-full h-full"
     />
   );
 };

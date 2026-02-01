@@ -545,7 +545,10 @@ const UIOverlay: React.FC<UIProps> = ({
                   // speak after a tiny delay so game canvas is ready
                   setTimeout(() => {
                     try {
-                      const text = `Nhân vật chính bị lạc khỏi Nhà — nơi tượng trưng cho bản ngã nguyên vẹn. Trên hành trình lớn lên, đi học, đi làm, hòa nhập xã hội, anh ta buộc phải đeo nhiều mặt nạ. Mỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng làm mòn Identity Integrity. Chỉ khi biết khi nào nên đeo, khi nào nên tháo, nhân vật mới có thể trở về Nhà.`;
+                      const text = `Nhân vật chính lạc khỏi Nhà — biểu tượng của bản ngã nguyên vẹn.
+Trên hành trình trưởng thành, anh buộc phải đeo nhiều mặt nạ để tồn tại.
+Mỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng bào mòn chính anh.
+Chỉ khi biết lúc nào nên đeo, lúc nào nên tháo, anh mới có thể trở về Nhà.`;
                       const u = new SpeechSynthesisUtterance(text);
                       u.lang = "vi-VN";
                       u.rate = 0.95;
@@ -1136,7 +1139,10 @@ const UIOverlay: React.FC<UIProps> = ({
             }}
           >
             <ThoughtBubble
-              text={`Nhân vật chính bị lạc khỏi “Nhà” – nơi tượng trưng cho bản ngã nguyên vẹn.\nTrên hành trình lớn lên, đi học, đi làm, hòa nhập xã hội, anh ta buộc phải đeo nhiều “mặt nạ”.\nMỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng làm mòn Identity Integrity.\nChỉ khi biết khi nào nên đeo – khi nào nên tháo, nhân vật mới có thể trở về Nhà.`}
+              text={`Nhân vật chính lạc khỏi Nhà — biểu tượng của bản ngã nguyên vẹn.
+Trên hành trình trưởng thành, anh buộc phải đeo nhiều mặt nạ để tồn tại.
+Mỗi mặt nạ giúp vượt qua hoàn cảnh, nhưng bào mòn chính anh.
+Chỉ khi biết lúc nào nên đeo, lúc nào nên tháo, anh mới có thể trở về Nhà.`}
             />
           </div>
         )}
