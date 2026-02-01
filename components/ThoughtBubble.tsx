@@ -27,7 +27,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         aria-label="thought bubble"
       >
         <defs>
-          <filter id="softShadow" x="-20%" y="-25%" width="140%" height="150%">
+          <filter id="softShadow" x="-20%" y="-25%" width="140%" height="95%">
             <feDropShadow
               dx="0"
               dy="6"
