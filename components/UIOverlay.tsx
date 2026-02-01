@@ -464,6 +464,11 @@ const UIOverlay: React.FC<UIProps> = ({
   const aiBorder = isLowHealth ? "border-red-500/50" : "border-green-500/50";
   const aiBg = isLowHealth ? "bg-red-500" : "bg-green-500";
 
+  const isLowIntegrity = integrity < 30;
+  const integrityWarnIntensity = isLowIntegrity
+    ? Math.min(1, (40 - integrity) / 30)
+    : 0;
+
   if (gameState === GameState.START) {
     return (
       <div className='absolute inset-0 bg-black/92 flex items-center justify-center p-6 z-50 crt-overlay'>
@@ -557,17 +562,17 @@ const UIOverlay: React.FC<UIProps> = ({
                 className='px-6 py-3 bg-emerald-500 text-black font-bold rounded hover:scale-105 transition transform shadow-md'
                 title='Chơi vô tận — đếm số màn'
               >
-                BẮT ĐẦU — VÔ TẬN
+                BẮT ĐẦU
               </button>
 
-              <button
+              {/* <button
                 onClick={() => setShowCampaignModal(true)}
                 className='px-4 py-3 border border-yellow-600 text-yellow-200 rounded text-sm'
                 aria-haspopup='dialog'
                 aria-expanded={showCampaignModal}
               >
                 CHIẾN DỊCH — 10 MÀN
-              </button>
+              </button> */}
             </div>
 
             {/* (Intro bubble moved to in-game overlay so it can follow the player) */}
@@ -1151,9 +1156,9 @@ const UIOverlay: React.FC<UIProps> = ({
                 opacity: 0,
               }}
             ></div>
-            <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-600/80 font-mono font-bold text-9xl uppercase opacity-10 blur-[2px] animate-pulse'>
+            {/* <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-600/80 font-mono font-bold text-9xl uppercase opacity-10 blur-[2px] animate-pulse'>
               SYSTEM FAILURE
-            </div>
+            </div> */}
           </div>
         )}
 
@@ -1649,6 +1654,17 @@ const UIOverlay: React.FC<UIProps> = ({
             <p className='text-sm'>{aiMessage}</p>
           </div>
         </div>
+
+        {isLowIntegrity && (
+          <div className='absolute top-10 left-1/2 -translate-x-1/2 z-40 pointer-events-none'>
+            <div
+              className='px-4 py-2 rounded-full bg-amber-400 text-black font-bold shadow-lg animate-pulse'
+              style={{ opacity: 0.6 + integrityWarnIntensity * 0.4 }}
+            >
+              MẤT CHẤT
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mask overlay (extracted) */}
@@ -1657,7 +1673,9 @@ const UIOverlay: React.FC<UIProps> = ({
       <div className='absolute top-4 left-4 flex flex-col gap-3 z-30 pointer-events-none w-72'>
         <div className='neumorph-card px-3 py-3 w-full'>
           <div className='flex items-baseline justify-between gap-3 mb-2'>
-            <div className='text-[10px] font-mono text-gray-400'>Chỉ số sinh tồn</div>
+            <div className='text-[10px] font-mono text-gray-400'>
+              Chỉ số sinh tồn
+            </div>
             <div className='text-sm font-mono font-semibold' aria-hidden>
               <span
                 className={
@@ -1677,9 +1695,7 @@ const UIOverlay: React.FC<UIProps> = ({
 
         <div className='neumorph-card px-3 py-3 w-full'>
           <div className='flex items-baseline justify-between gap-3 mb-2'>
-            <div className='text-[10px] font-mono text-gray-400'>
-              BẢN NGÃ
-            </div>
+            <div className='text-[10px] font-mono text-gray-400'>BẢN NGÃ</div>
             <div className='text-sm font-mono font-semibold text-cyan-300'>
               {Math.round(integrity)}%
             </div>
@@ -1712,7 +1728,9 @@ const UIOverlay: React.FC<UIProps> = ({
           className='neumorph-card px-3 py-2 w-full flex items-center justify-between gap-3'
           aria-hidden
         >
-          <div className='text-[10px] font-mono text-gray-400'>Thời gian màn chơi</div>
+          <div className='text-[10px] font-mono text-gray-400'>
+            Thời gian màn chơi
+          </div>
           <div className='text-sm font-mono font-semibold text-amber-300'>
             {currentLevelTime ? formatTime(currentLevelTime) : "00:00.00"}
           </div>

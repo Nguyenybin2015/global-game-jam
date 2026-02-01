@@ -973,6 +973,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     _lastTimerUpdate: 0,
     // campaign timing (used for PREGENERATED campaign runs)
     campaignStartTime: 0,
+    // damage/health-dropping visual state
+    healthDropping: false,
+    healthDropTimer: 0,
   });
 
   // Preload map 1 background image (served from public/)
@@ -2035,6 +2038,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const p = player.current;
     const l = levelState.current;
 
+    // decay transient health-drop timer/effect
+    if (l.healthDropTimer && l.healthDropTimer > 0) {
+      l.healthDropTimer--;
+      if (l.healthDropTimer <= 0) {
+        l.healthDropping = false;
+        l.healthDropTimer = 0;
+      }
+    }
+
     p.scaleX += (1 - p.scaleX) * 0.1;
     p.scaleY += (1 - p.scaleY) * 0.1;
 
@@ -2330,7 +2342,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       setCurrentIntegrity(val);
     }
     if (p.health <= 0) {
-      setDeathReason("S.E.R.A: Đối tượng đã ngưng hoạt động.");
+      // setDeathReason("S.E.R.A: Đối tượng đã ngưng hoạt động.");
       // if this was an endless run, persist the result (levels cleared)
       if (levelState.current.endlessMode) {
         const levels = levelState.current.endlessLevelsCompleted || 0;
@@ -2354,7 +2366,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       setGameState(GameState.GAME_OVER);
     }
     if (p.integrity <= 0) {
-      setDeathReason("S.E.R.A: Đồng hóa hoàn tất.");
+      // setDeathReason("S.E.R.A: Đồng hóa hoàn tất.");
       if (levelState.current.endlessMode) {
         const levels = levelState.current.endlessLevelsCompleted || 0;
         const total = Math.max(
@@ -2393,6 +2405,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     player.current.hurtTimer = 10;
     player.current.scaleX = 0.8;
     player.current.scaleY = 0.8;
+    // trigger transient damage effect (clears automatically in update loop)
+    levelState.current.healthDropping = true;
+    levelState.current.healthDropTimer = 36; // frames (~600ms at 60fps)
     if (
       Math.abs(player.current.health - lastReported.current.health) > 1 ||
       player.current.health <= 0
@@ -2579,6 +2594,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     let glitchOffsetX = 0;
     if (lowHealth && Math.random() > 0.8) {
       glitchOffsetX = (Math.random() - 0.5) * 20 * ((40 - p.health) / 10);
+    }
+
+    // transient damage overlay while health is actively dropping
+    if (l.healthDropping && l.healthDropTimer && l.healthDropTimer > 0) {
+      ctx.save();
+      // alpha fades out as timer decreases
+      const a = Math.min(0.18, (l.healthDropTimer / 36) * 0.18);
+      ctx.fillStyle = `rgba(231,76,60,${a.toFixed(3)})`;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.restore();
     }
 
     // Map number (large subtle glyph at top) and title (centered)
@@ -3188,7 +3213,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className="block w-full h-full"
+      className='block w-full h-full'
     />
   );
 };
