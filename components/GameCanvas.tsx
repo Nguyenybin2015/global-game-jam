@@ -1520,7 +1520,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
               wallIcon = "briefcase";
               break;
             case 3:
-              wallLabel = `Bất Công\nLàm từ thành tích người khác\nChỉ vỡ khi 😡 Giận dữ`;
+              wallLabel = `Bất Công`;
               wallIcon = "mask";
               // override: only BREAKS / can be passed when in WORKER persona
               wallReqMask = MaskType.WORKER;
